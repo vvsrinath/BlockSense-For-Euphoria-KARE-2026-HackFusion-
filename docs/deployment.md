@@ -31,23 +31,38 @@ redirects are picked up automatically — no settings to enter by hand.
 - Publish directory: `apps/web/dist`
 - Node: 20
 
-### If your site already has its base directory set to `apps/web`
+### The base directory must be the repository root
 
-Netlify only reads `netlify.toml` from the base directory, so a site pointed at
-`apps/web` ignores the root file completely and falls back to whatever is in the
-dashboard. That usually means no build command and no function, which looks like
-a build that randomly fails.
+This is the one setting that can make the build fail before it starts, and it is
+not visible from the repository.
 
-There is a configuration for that case at `apps/web/netlify.toml`, written
-relative to its own directory, so a site with that base directory deploys
-correctly as-is. `tests/netlifyConfig.test.ts` asserts the two files declare the
-same redirects in the same order, so they cannot drift.
+Set **Base directory** to `/` (or clear the field so Netlify detects it). Do not
+set it to `apps/web`.
 
-Either way, setting the base directory back to `/` is the cleaner fix.
+A base directory of `apps/web` cannot build this project. Netlify copies only
+that subtree into the build, and three things it needs are above it:
 
-The build command covers the API as well as the web app, because the function
-imports the already-built bundle. Building only the frontend would leave
-`apps/api/dist` missing and the function would fail at import.
+| Needed | Lives at | Visible with base `apps/web`? |
+| --- | --- | --- |
+| `pnpm-lock.yaml` | repository root | no |
+| `pnpm-workspace.yaml` | repository root | no |
+| `netlify/functions/api.mjs` | repository root | no |
+
+The failure looks unrelated to the cause. With a `netlify.toml` in `apps/web`,
+Netlify rejects it outright:
+
+```
+Configuration property "functionsDirectory" "../../netlify/functions"
+must be inside the repository root directory.
+```
+
+And without one, it silently falls back to the dashboard settings — so the
+deploy runs with no build command, no function, and no redirects.
+
+`tests/netlifyConfig.test.ts` asserts there is exactly one `netlify.toml`, at
+the root, and that the functions directory does not escape the repository. A
+second copy in a subdirectory is not harmless: Netlify prefers it over the root
+file and then refuses to build.
 
 ## 2. Check it
 
