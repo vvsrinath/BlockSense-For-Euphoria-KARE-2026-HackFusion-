@@ -199,8 +199,12 @@ loaded, the amount detector stays quiet rather than guessing a threshold.
 ## CORS
 
 `Access-Control-Allow-Origin` is restricted to the configured origins, which
-default to `http://localhost:5173` and `http://127.0.0.1:5173`. Override with a
-comma-separated `CORS_ORIGINS`. `*` is honoured if you set it explicitly.
+default to the Vite dev server. Override with a comma-separated
+`FRONTEND_URL`; `*` is honoured if you set it explicitly.
+
+In production the app and this API are served from one origin by Netlify, so
+there is no cross-origin request and the allowlist does not apply. It matters
+only if you host the frontend somewhere else.
 
 ## Configuration
 
@@ -208,16 +212,25 @@ All optional. See `.env.example`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `API_PORT` | `8787` | Port to listen on |
+| `PORT` | `3000` | Port to listen on |
 | `API_HOST` | `0.0.0.0` | Interface to bind |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
-| `USE_LIVE_DATA` | `false` | `false` forces every adapter to mock data |
-| `MOCK_LATENCY` | `120` | Simulated latency in ms for the mock transport |
-| `CORS_ORIGINS` | localhost:5173 | Comma-separated allowlist |
+| `FRONTEND_URL` | `http://localhost:5173` | Comma-separated origin allowlist |
+| `CACHE_TTL_SECONDS` | `60` | How long a provider response stays cached |
+| `MAX_GRAPH_NODES` | `25` | Node cap for the network graph |
+| `MAX_GRAPH_EDGES` | `50` | Edge cap for the network graph |
+| `REQUEST_TIMEOUT_MS` | `15000` | Budget for outbound provider calls |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window per client IP |
+| `RATE_LIMIT_MAX_REQUESTS` | `120` | Requests allowed per window |
 
-`USE_LIVE_DATA=false` overrides any RPC URL present. That is intentional: a
-developer who has a key exported locally should not silently start hitting a
-paid API during a demo run.
+Provider credentials are per chain: `ETHEREUM_RPC_URL`, `BNB_RPC_URL`,
+`TRON_API_KEY`, `MEMPOOL_API_KEY`, `ETHERSCAN_API_KEY`, `BSCSCAN_API_KEY`. With
+none set, each chain falls back to a public endpoint, which is rate limited.
+
+`USE_LIVE_DATA` is accepted but does nothing: BlockSense always reads live
+chain data. A stale `false` is reported at boot rather than silently honoured,
+so a leftover value cannot look like demo mode while the API is serving real
+chains. There is no mock transport.
 
 ## Extending
 
