@@ -27,7 +27,8 @@ export default defineConfig({
     // "slow network" warning is noise rather than signal.
     proxy: {
       '/api': {
-        target: process.env.API_BASE_URL ?? 'http://localhost:8787',
+        // Must match the API's own default port; 8787 pointed at nothing.
+        target: process.env.API_BASE_URL ?? 'http://localhost:3000',
         changeOrigin: true
       }
     }

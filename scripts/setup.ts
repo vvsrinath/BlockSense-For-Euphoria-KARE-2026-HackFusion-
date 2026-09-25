@@ -40,7 +40,7 @@ say();
 say(`${BOLD}Next steps${RESET}`);
 say(`  1. ${DIM}pnpm install${RESET}          install dependencies`);
 say(`  2. ${DIM}pnpm dev${RESET}              start the web app on http://localhost:5173`);
-say(`  3. ${DIM}pnpm dev:api${RESET}          start the API on http://localhost:8787`);
+say(`  3. ${DIM}pnpm dev:api${RESET}          start the API on http://localhost:3000`);
 say();
 say(`${BOLD}Verify${RESET}`);
 say(`  ${DIM}pnpm typecheck${RESET}    type-check every package`);

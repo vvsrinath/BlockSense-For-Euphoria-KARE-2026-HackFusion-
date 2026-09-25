@@ -85,7 +85,7 @@ package boundaries and the "just-in-time packages" approach.
 | --- | --- |
 | `pnpm install` | Install everything. The only required step. |
 | `pnpm dev` | Web app on <http://localhost:5173> |
-| `pnpm dev:api` | API on <http://localhost:8787> |
+| `pnpm dev:api` | API on <http://localhost:3000> |
 | `pnpm build` | Production build of the web app, then a typecheck of the API |
 | `pnpm typecheck` | Type-check every package and app at once |
 | `pnpm lint` | ESLint across the repository |
@@ -128,7 +128,7 @@ Every analysis the interface can perform is available over HTTP, so BlockSense
 is usable without the UI.
 
 ```bash
-curl -X POST localhost:8787/api/analyze \
+curl -X POST localhost:3000/api/v1/analyze \
   -H 'content-type: application/json' \
   -d '{"hash":"0x4a5e...92a3b","chain":"ethereum"}'
 ```

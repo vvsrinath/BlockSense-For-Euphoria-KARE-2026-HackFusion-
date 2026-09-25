@@ -214,6 +214,7 @@ const tokenCache = new Map<string, Promise<Trc20Meta | null>>();
 /** How many uncached contracts one read may interrogate. */
 const MAX_TOKEN_LOOKUPS = 5;
 
+
 /**
  * Normalise the `trc20` field of an account.
  *
@@ -248,7 +249,7 @@ export function parseTrc20Holdings(field: unknown): Array<{ contract: string; ra
 const EMPTY_TOKENS = new Map<string, Trc20Meta>();
 
 /** Decode an ABI-encoded `uint256`. */
-function abiDecodeUint(hex: string): number | null {
+export function abiDecodeUint(hex: string): number | null {
   const clean = hex.replace(/^0x/, '');
   if (clean.length < 64) return null;
   const value = BigInt(`0x${clean.slice(-64)}`);
@@ -263,23 +264,50 @@ function abiDecodeUint(hex: string): number | null {
  * the payload has to be read twice. Any short or inconsistent return is
  * treated as "no name" rather than parsed loosely.
  */
-function abiDecodeString(hex: string): string | null {
+export function abiDecodeString(hex: string): string | null {
   const clean = hex.replace(/^0x/, '');
+  // A dynamic string is a head word (the byte offset of the tail) followed by
+  // the tail: a length word, then the bytes. The head is measured in BYTES
+  // while the payload is a hex string, so every index has to be doubled on the
+  // way out. Reading the length from the raw byte offset silently produced
+  // garbage and made every token name fall back to its contract address.
   if (clean.length < 128) return null;
 
-  const offset = Number.parseInt(clean.slice(0, 64), 16);
-  if (!Number.isFinite(offset) || offset + 64 > clean.length) return null;
+  const headBytes = Number.parseInt(clean.slice(0, 64), 16);
+  if (!Number.isFinite(headBytes) || headBytes % 32 !== 0) return null;
 
-  const length = Number.parseInt(clean.slice(offset, offset + 64), 16);
-  if (!Number.isFinite(length) || length === 0 || length > 128 || offset + 64 + length * 2 > clean.length) return null;
+  const lengthAt = headBytes * 2;
+  const length = Number.parseInt(clean.slice(lengthAt, lengthAt + 64), 16);
+  if (!Number.isFinite(length) || length === 0 || length > 128) return null;
 
-  const bytes = Uint8Array.from(clean.slice(offset + 64, offset + 64 + length * 2).match(/.{2}/g)!.map((b) => Number.parseInt(b, 16)));
+  // The bytes start one word past the length word.
+  const dataAt = lengthAt + 64;
+  const dataEnd = dataAt + length * 2;
+  if (dataEnd > clean.length) return null;
+
+  const bytes = Uint8Array.from(clean.slice(dataAt, dataEnd).match(/.{2}/g)!.map((b) => Number.parseInt(b, 16)));
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return /^[A-Za-z0-9.$_-]{1,32}$/.test(text) ? text : null;
+    // Names commonly contain spaces ("Tether USD", "Binance Peg WETH"), so
+    // rejecting them wholesale left the product showing a contract address
+    // where a token name belonged. The set is still narrow on purpose: it
+    // keeps a decode error from rendering as control characters in the UI.
+    return /^[A-Za-z0-9 .$_-]{1,48}$/.test(text) ? text : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether a token name is short and dense enough to double as its ticker.
+ *
+ * The node's `symbol()` returns an empty result for many TRC-20 contracts, so
+ * `name()` is often the only usable answer. "WINK" is a ticker; "Tether USD" is
+ * not, and shortening it would invent information the chain never gave us.
+ */
+function tickerFrom(name: string | null): string | null {
+  if (!name) return null;
+  return name.length <= 10 && /^[A-Za-z0-9._-]+$/.test(name) ? name : null;
 }
 
 /** Base58 TRON address to the `41…` hex form the node endpoints expect. */
@@ -326,6 +354,20 @@ const TRC20_SELECTORS: Record<string, { method: string; words: number }> = {
   // transferFrom(address from, address to, uint256 amount)
   '23b872dd': { method: 'transferFrom', words: 3 }
 };
+
+/**
+ * Raw 4-byte selectors for the optional metadata view, hex encoded.
+ *
+ * The node accepts these in the `data` field of a constant call. Passing them
+ * as a `function_selector` argument instead — as a name, base64, or base58 —
+ * makes it answer CONTRACT_VALIDATE_ERROR with an empty result; see
+ * `readToken`.
+ */
+const TRC20_METADATA_SELECTORS = {
+  decimals: '313ce567', // decimals()
+  symbol: '95d5fca3', // symbol()
+  name: '06fdde03' // name()
+} as const;
 
 /** Pull a left-padded 32-byte address word out of calldata. */
 function addressWord(body: string, index: number): string {
@@ -459,12 +501,15 @@ export class TronAdapter extends BaseAdapter {
     // Prefer what the contract says about itself; fall back to a short label.
     const token = tokens.get(tokenContract);
     const tokenSymbol = token?.symbol ?? symbolFromContract(tokenContract);
+    // Prefer the contract's own name for the long label; it reads better than a
+    // ticker, and falls back to the ticker when the contract does not answer.
+    const tokenName = token?.name ?? tokenSymbol;
     const tokenDecimals = token?.decimals ?? 0;
 
     const asset: TransactionAsset = isTrc20
       ? {
           type: 'token',
-          name: tokenSymbol,
+          name: tokenName,
           symbol: tokenSymbol,
           // Scaled by the contract's own `decimals()`, so this is tokens, not
           // base units. A 100 USDT transfer reads as "100", not "100000000".
@@ -607,20 +652,32 @@ export class TronAdapter extends BaseAdapter {
     if (!hex) return null;
 
     /**
-     * One constant call, tolerant of failure.
+     * One constant call, retried once, tolerant of failure.
      *
-     * The two calls are independent on purpose: a contract that implements
+     * The node answers these intermittently: the same selector can return a
+     * value on one attempt and an empty result on the next, usually when
+     * several calls land at once. A single dropped `decimals()` answer is not a
+     * cosmetic problem — it scales every amount by the wrong power of ten — so
+     * one retry is worth the latency, while repeated failure still falls back
+     * rather than hanging the page.
+     *
+     * The calls are independent on purpose: a contract that implements
      * `decimals()` but not `symbol()` must still yield a usable scale, and a
-     * rate limit on one call must not throw away the other one's answer.
+     * failure on one must not throw away the other one's answer.
      */
-    const call = async (selector: string): Promise<string | null> => {
+    const attempt = async (selector: string): Promise<string | null> => {
       try {
+        // The selector goes in `data` as raw hex. Sending it in
+        // `function_selector` instead — whether as a name, base64, or base58 —
+        // makes the node answer CONTRACT_VALIDATE_ERROR with an empty result,
+        // which used to be swallowed here and left every token displaying a
+        // placeholder like "TRC20-TLa2" with a scale of 0.
         const result = await this.post<{
           result?: { result?: boolean; code?: string; constant_result?: string[] };
           constant_result?: string[];
         }>(
           '/wallet/triggerconstantcontract',
-          { owner_address: hex, contract_address: hex, function_selector: selector }
+          { owner_address: hex, contract_address: hex, data: selector }
         );
         // A contract that does not implement the method answers with a validate
         // error rather than a revert, so both shapes have to be rejected.
@@ -632,13 +689,31 @@ export class TronAdapter extends BaseAdapter {
       }
     };
 
-    const [decimalsHex, symbolHex] = await Promise.all([call('decimals()'), call('symbol()')]);
+    const call = async (selector: string): Promise<string | null> => {
+      const first = await attempt(selector);
+      if (first) return first;
+      // A short pause is enough to step out of the node's burst window.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return attempt(selector);
+    };
+
+    const [decimalsHex, symbolHex, nameHex] = await Promise.all([
+      call(TRC20_METADATA_SELECTORS.decimals),
+      call(TRC20_METADATA_SELECTORS.symbol),
+      call(TRC20_METADATA_SELECTORS.name)
+    ]);
     const decimals = decimalsHex ? abiDecodeUint(decimalsHex) : null;
     const symbol = symbolHex ? abiDecodeString(symbolHex) : null;
+    const name = nameHex ? abiDecodeString(nameHex) : null;
 
     // Nothing readable at all: the caller falls back to a short contract label.
-    if (decimals === null && !symbol) return null;
-    return { symbol: symbol ?? symbolFromContract(contract), decimals: decimals ?? 0 };
+    if (decimals === null && !symbol && !name) return null;
+
+    return {
+      symbol: symbol ?? tickerFrom(name) ?? name ?? symbolFromContract(contract),
+      name: name ?? undefined,
+      decimals: decimals ?? 0
+    };
   }
 
   override async getHistory(address: string, options: HistoryOptions = {}): Promise<Transaction[]> {
