@@ -1,0 +1,52 @@
+# Site configuration, at the repository root so Netlify finds it without the
+# base directory being set by hand. Every path below is root-relative.
+
+[dev]
+  # `netlify dev` serves the app and the function together, which is the only
+  # way to exercise the /api redirect locally.
+  command = "pnpm dev"
+  targetPort = 5173
+  port = 8888
+  framework = "#custom"
+
+[build]
+  # The API bundle is imported by the function below, so the API has to be
+  # built too. The web build alone would leave `apps/api/dist` missing and the
+  # function would fail at import time.
+  command = "pnpm install --frozen-lockfile && pnpm build"
+  publish = "apps/web/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  # Matches the version this project declares in package.json engines and the
+  # one the test suite runs on.
+  NODE_VERSION = "20"
+  # The function imports an already-bundled, self-contained file, so there is
+  # nothing left for Netlify's bundler to resolve. esbuild still needs to run.
+  NODE_BUNDLER = "esbuild"
+
+# The API runs as a function on this same origin, so `VITE_API_BASE_URL` is not
+# needed: the web client calls `/api/v1` and Netlify routes it below.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# The API, before anything else. Order matters: Netlify applies these in
+# sequence, and the catch-all below would otherwise serve index.html for
+# /api/v1/health and the app would render HTML where it expects JSON.
+#
+# `force` is what stops the static-asset handler from claiming these paths.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# Single-page app: every unknown path belongs to the client router, so it is
+# served from index.html and the router resolves the route. Rules without
+# `force = true` only apply when no file matches, so hashed assets under
+# /assets/ are unaffected.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

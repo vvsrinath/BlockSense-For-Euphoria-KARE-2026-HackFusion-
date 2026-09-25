@@ -227,3 +227,57 @@ describe('PriceService.tokenMetadata', () => {
     expect(withMeta.mock.calls.length).toBe(callsAfterPrice);
   });
 });
+
+describe('PriceService failure caching', () => {
+  it('does not record a transport failure as "this asset is unlisted"', async () => {
+    // Caching a failed request made a single dropped call look like a
+    // definitive answer, leaving a token nameless and unpriced for the whole
+    // TTL. Only a completed response may be remembered.
+    let fail = true;
+    const fetchImpl = vi.fn(async () => {
+      if (fail) throw new Error('socket hang up');
+      return new Response(
+        JSON.stringify({ coins: { 'coingecko:bitcoin': { price: 84_000, symbol: 'BTC', timestamp: 1, confidence: 0.99 } } }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+    const service = new PriceService({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const key = [{ chain: 'bitcoin', type: 'native', symbol: 'BTC' }] as const;
+
+    expect((await service.quoteMany([...key])).size).toBe(0);
+
+    // The provider recovers; the next call must not serve a cached miss.
+    fail = false;
+    const quotes = await service.quoteMany([...key]);
+    expect(quotes.get('coingecko:bitcoin')?.usd).toBe(84_000);
+  });
+
+  it('does not record a rate-limit response as unlisted', async () => {
+    let status = 429;
+    const fetchImpl = vi.fn(async () =>
+      status === 429
+        ? new Response('slow down', { status: 429 })
+        : new Response(
+            JSON.stringify({ coins: { 'coingecko:bitcoin': { price: 84_000, symbol: 'BTC', timestamp: 1, confidence: 0.99 } } }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          )
+    );
+    const service = new PriceService({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const key = [{ chain: 'bitcoin', type: 'native', symbol: 'BTC' }] as const;
+
+    expect((await service.quoteMany([...key])).size).toBe(0);
+    status = 200;
+    expect((await service.quoteMany([...key])).size).toBe(1);
+  });
+
+  it('still remembers a completed response that listed nothing', async () => {
+    // A successful answer saying "no such token" is worth caching: asking again
+    // for the rest of the TTL would only spend the rate limit.
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    const service = new PriceService({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const key = [{ chain: 'tron', type: 'token', symbol: 'NOPE', contractAddress: 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7' }] as const;
+    await service.quoteMany([...key]);
+    await service.quoteMany([...key]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

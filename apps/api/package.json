@@ -18,6 +18,7 @@
     "@blocksense/intelligence": "workspace:*",
     "@blocksense/shared": "workspace:*",
     "@blocksense/transaction-engine": "workspace:*",
+    "serverless-http": "^4.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

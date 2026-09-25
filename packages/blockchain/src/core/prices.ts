@@ -138,10 +138,14 @@ export class PriceService {
 
     for (let i = 0; i < missing.length; i += MAX_KEYS_PER_REQUEST) {
       const batch = missing.slice(i, i + MAX_KEYS_PER_REQUEST);
-      const quotes = await this.fetchBatch(batch);
+      const { quotes, ok } = await this.fetchBatch(batch);
       for (const key of batch) {
         const quote = quotes.get(key) ?? null;
-        this.store(key, quote);
+        // Only a successful answer is cached, and an absent entry within one is
+        // a real "this provider does not list it". Caching a transport failure
+        // would instead record it as unlisted for the whole TTL, so a single
+        // dropped request left a token nameless and unpriced for five minutes.
+        if (ok || quote) this.store(key, quote);
         if (quote) out.set(key, quote);
       }
     }
@@ -149,9 +153,15 @@ export class PriceService {
     return out;
   }
 
-  private async fetchBatch(keys: string[]): Promise<Map<string, PriceQuote>> {
+  /**
+   * Fetch one batch.
+   *
+   * `ok` distinguishes "the provider answered and did not list these" from "the
+   * request never completed". The first is worth remembering; the second is not.
+   */
+  private async fetchBatch(keys: string[]): Promise<{ quotes: Map<string, PriceQuote>; ok: boolean }> {
     const quotes = new Map<string, PriceQuote>();
-    if (keys.length === 0) return quotes;
+    if (keys.length === 0) return { quotes, ok: true };
 
     const url = `${this.endpoint}/${keys.map(encodeURIComponent).join(',')}`;
     let payload: {
@@ -159,11 +169,11 @@ export class PriceService {
     };
     try {
       const res = await this.fetchImpl(url, { headers: { accept: 'application/json' } });
-      if (!res.ok) return quotes;
+      if (!res.ok) return { quotes, ok: false };
       payload = (await res.json()) as typeof payload;
     } catch {
       // Price data is an enrichment, never a reason to fail a request.
-      return quotes;
+      return { quotes, ok: false };
     }
 
     for (const [key, coin] of Object.entries(payload.coins ?? {})) {
@@ -177,7 +187,7 @@ export class PriceService {
         ...(typeof coin.decimals === 'number' ? { decimals: coin.decimals } : {})
       });
     }
-    return quotes;
+    return { quotes, ok: true };
   }
 
   /**
