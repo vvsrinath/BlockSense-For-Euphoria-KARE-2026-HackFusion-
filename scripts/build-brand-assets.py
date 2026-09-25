@@ -43,6 +43,23 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
+def portrait_path() -> Path:
+    """Where to look for the developer portrait.
+
+    Optional, and outside the repository like the logo. The about page falls
+    back to initials when it is absent, so publishing the site is never blocked
+    on having a photo.
+    """
+    override = os.environ.get("PORTRAIT_SOURCE")
+    if override:
+        return Path(override).expanduser()
+
+    for candidate in sorted(ROOT.parent.glob("*.png")) + sorted(ROOT.parent.glob("*.jpg")):
+        if "logo" not in candidate.name.lower() and "developer" in candidate.name.lower():
+            return candidate
+    return ROOT.parent / "developer photo.png"
+
+
 def source_path() -> Path:
     candidate = (
         sys.argv[1]
@@ -235,6 +252,21 @@ def main() -> None:
         f"\nUpdate MARK_ASPECT in packages/ui/src/BrandLogo.tsx "
         f"if it is not already {mark.width}/{mark.height}."
     )
+
+    portrait_src = portrait_path()
+    if portrait_src.is_file():
+        # Square-cropped and downscaled rather than published raw: the source is
+        # a high-resolution portrait that would add about a megabyte to the
+        # deploy for a 128-pixel avatar.
+        portrait = Image.open(portrait_src).convert("RGB")
+        side = min(portrait.size)
+        left = (portrait.width - side) // 2
+        top = max(0, (portrait.height - side) // 3)  # bias upward, toward the face
+        portrait = portrait.crop((left, top, left + side, top + side)).resize((320, 320), Image.LANCZOS)
+        write("developer.jpg", portrait)
+        print(f"\nDeveloper portrait published from {portrait_src}")
+    else:
+        print(f"\nNo developer portrait at {portrait_src}; the about page shows initials.")
 
 
 if __name__ == "__main__":

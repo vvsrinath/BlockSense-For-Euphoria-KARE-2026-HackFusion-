@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '@blocksense/ui';
 import { footerColumns, externalLinks } from '../../data/site';
+import { closing, developer } from '../../data/developer';
 
 /** Public site footer: the full route map, so nothing here is a dead end. */
 export function PublicFooter() {
@@ -13,6 +14,12 @@ export function PublicFooter() {
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
               Behavioural analysis of on-chain activity, read live from five chains. No private keys, no
               accounts, no stored data about you.
+            </p>
+            <p className="mt-3 text-sm text-muted">
+              Built by{' '}
+              <Link to="/about" className="font-medium text-ink transition-colors duration-150 hover:text-primary">
+                {developer.name}
+              </Link>
             </p>
           </div>
 
@@ -34,7 +41,8 @@ export function PublicFooter() {
 
         <div className="mt-10 flex flex-col gap-4 border-t border-line pt-6 md:flex-row md:items-center md:justify-between">
           <p className="text-xs text-muted">
-            Open source, built for the Euphoria / HackFusion hackathon. Not investment, legal, or investigative advice.
+            {closing.tagline} Open source, built for the Euphoria / HackFusion hackathon. Not
+            investment, legal, or investigative advice.
           </p>
           <ul className="flex flex-wrap items-center gap-4">
             {externalLinks.map((link) =>

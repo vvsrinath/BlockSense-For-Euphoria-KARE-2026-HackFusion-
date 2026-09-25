@@ -6,6 +6,7 @@ import { useSettings } from '../../stores/SettingsContext';
 import { primaryNav } from "../../data/navigation";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from '@blocksense/shared';
+import { developer } from '../../data/developer';
 export function Sidebar() {
   const {
     settings,
@@ -37,11 +38,19 @@ export function Sidebar() {
             {collapsed ? <PanelLeftOpenIcon className="h-[18px] w-[18px]" aria-hidden="true" /> : <PanelLeftCloseIcon className="h-[18px] w-[18px]" aria-hidden="true" />}
             {!collapsed && <span>Collapse</span>}
           </button>}
-        <Link to="/settings" className={cn('mt-2 flex items-center gap-3 rounded-xl py-2 hover:bg-subtle', collapsed ? 'justify-center' : 'px-2')} aria-label="Alex Morgan — profile and settings">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">AM</span>
+        {/* There is no account system, so this is the author rather than a
+            signed-in user. Inventing a profile here would imply a backend that
+            does not exist. */}
+        <Link
+          to="/about"
+          className={cn('mt-2 flex items-center gap-3 rounded-xl py-2 hover:bg-subtle', collapsed ? 'justify-center' : 'px-2')}
+          aria-label={`${developer.name} — about the developer`}>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {developer.initials}
+          </span>
           {!collapsed && <span className="min-w-0">
-              <span className="block truncate text-sm font-medium text-ink">Alex Morgan</span>
-              <span className="block truncate text-xs text-muted">Demo workspace</span>
+              <span className="block truncate text-sm font-medium text-ink">{developer.shortName}</span>
+              <span className="block truncate text-xs text-muted">Developer</span>
             </span>}
         </Link>
       </div>

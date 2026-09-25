@@ -7,6 +7,8 @@ import {
   GitBranchIcon,
   GithubIcon,
   LayersIcon,
+  LinkedinIcon,
+  MailIcon,
   NetworkIcon,
   ScrollTextIcon,
   SparklesIcon,
@@ -146,6 +148,8 @@ export const docsSections: DocsLink[] = [
 /** External repositories and resources. */
 export const externalLinks: SiteLink[] = [
   { label: 'GitHub', to: 'https://github.com/vvsrinath/BlockSense-For-Euphoria-KARE-2026-HackFusion-', icon: GithubIcon },
-  { label: 'Security disclosure', to: '/security' },
-  { label: 'API status', to: '/status' }
+  { label: 'LinkedIn', to: 'https://www.linkedin.com/in/srinath-v-a26b372b7/', icon: LinkedinIcon },
+  { label: 'vvsrinath0@gmail.com', to: 'mailto:vvsrinath0@gmail.com', icon: MailIcon },
+  { label: 'Security', to: '/security' },
+  { label: 'Status', to: '/status' }
 ];
