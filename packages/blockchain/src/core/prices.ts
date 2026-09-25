@@ -42,6 +42,8 @@ export interface PriceQuote {
   confidence: number;
   symbol: string;
   timestamp: number;
+  /** Token scale as the provider reports it, when it reports one. */
+  decimals?: number;
 }
 
 interface CacheEntry {
@@ -152,7 +154,9 @@ export class PriceService {
     if (keys.length === 0) return quotes;
 
     const url = `${this.endpoint}/${keys.map(encodeURIComponent).join(',')}`;
-    let payload: { coins?: Record<string, { price?: number; symbol?: string; timestamp?: number; confidence?: number }> };
+    let payload: {
+      coins?: Record<string, { price?: number; symbol?: string; timestamp?: number; confidence?: number; decimals?: number }>;
+    };
     try {
       const res = await this.fetchImpl(url, { headers: { accept: 'application/json' } });
       if (!res.ok) return quotes;
@@ -169,10 +173,37 @@ export class PriceService {
         usd,
         confidence: coin.confidence ?? 0,
         symbol: coin.symbol ?? '',
-        timestamp: (coin.timestamp ?? 0) * 1000
+        timestamp: (coin.timestamp ?? 0) * 1000,
+        ...(typeof coin.decimals === 'number' ? { decimals: coin.decimals } : {})
       });
     }
     return quotes;
+  }
+
+  /**
+   * The provider's own view of a token: ticker and scale.
+   *
+   * This is a *fallback* for chains whose node does not answer metadata calls
+   * reliably, never a primary source. The chain is authoritative for
+   * `decimals`; this is what keeps an amount from being scaled by the wrong
+   * power of ten when that call is dropped. It reuses the price cache, so a
+   * token that has already been priced costs no extra request.
+   */
+  async tokenMetadata(
+    chain: ChainId,
+    contractAddress: string
+  ): Promise<{ symbol: string; decimals?: number } | null> {
+    const key = priceKeyFor({ chain, type: 'token', symbol: '', contractAddress });
+    if (!key) return null;
+
+    const hit = this.cached(key);
+    if (hit === null) return null;
+    if (hit) return hit.symbol ? { symbol: hit.symbol, ...(hit.decimals !== undefined ? { decimals: hit.decimals } : {}) } : null;
+
+    const quotes = await this.quoteMany([{ chain, type: 'token', symbol: '', contractAddress }]);
+    const quote = quotes.get(key);
+    if (!quote?.symbol) return null;
+    return { symbol: quote.symbol, ...(quote.decimals !== undefined ? { decimals: quote.decimals } : {}) };
   }
 
   /**

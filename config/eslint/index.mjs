@@ -91,6 +91,9 @@ export default [
       'apps/api/src/**/*.ts',
       'scripts/**/*.ts',
       'tests/**/*.ts',
+      // Build tooling written as plain ESM, so it runs on a host without a
+      // TypeScript loader installed.
+      '**/scripts/**/*.mjs',
       '**/vite.config.ts',
       '**/*.config.ts'
     ],

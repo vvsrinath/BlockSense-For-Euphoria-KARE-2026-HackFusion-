@@ -3,6 +3,7 @@ import type { AdapterConfig, Balance, ChainTip, HistoryOptions } from '../core/a
 import { BaseAdapter } from '../core/base';
 import { httpGet, httpPost } from '../core/client';
 import { ProviderError } from '../core/errors';
+import { activePriceService } from '../core/prices';
 import { sha256 } from '../core/sha256';
 
 export const TRON_ENV = {
@@ -639,9 +640,25 @@ export class TronAdapter extends BaseAdapter {
     // permanently nameless for the life of the process — which is exactly what
     // happened before this was separated out.
     const pending = this.readToken(key)
-      .then((meta) => {
-        if (meta) tokenCache.set(key, Promise.resolve(meta));
-        return meta;
+      .then(async (meta) => {
+        if (meta) {
+          tokenCache.set(key, Promise.resolve(meta));
+          return meta;
+        }
+        // The node drops these constant calls intermittently, and an unanswered
+        // `decimals()` scales every amount by the wrong power of ten. Fall back
+        // to the price provider, which reports a ticker and a scale for the
+        // same contract and usually has the answer already cached.
+        const fallback = await activePriceService().tokenMetadata('tron', key);
+        if (!fallback) return null;
+        const resolved: Trc20Meta = {
+          symbol: fallback.symbol,
+          // A provider that names a token but not its scale is still better
+          // than no name; 0 keeps the existing "unknown scale" behaviour.
+          decimals: fallback.decimals ?? 0
+        };
+        tokenCache.set(key, Promise.resolve(resolved));
+        return resolved;
       })
       .catch(() => null);
     return pending;

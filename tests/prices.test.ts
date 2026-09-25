@@ -184,3 +184,46 @@ describe('PriceService.enrich', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe('PriceService.tokenMetadata', () => {
+  /** DefiLlama reports decimals and a symbol alongside the price. */
+  const withMeta = vi.fn(async () =>
+    new Response(
+      JSON.stringify({
+        coins: {
+          ['tron:tla2f6vpqdgre67v1736s7bj8ray5wyju7']: {
+            price: 0.0000426,
+            symbol: 'WINK',
+            decimals: 6,
+            timestamp: 1_700_000_000,
+            confidence: 0.99
+          }
+        }
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    )
+  );
+
+  it('returns the ticker and scale the provider reports', async () => {
+    const service = new PriceService({ fetchImpl: withMeta as unknown as typeof fetch });
+    const meta = await service.tokenMetadata('tron', 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7');
+    expect(meta).toEqual({ symbol: 'WINK', decimals: 6 });
+  });
+
+  it('returns null for a token the provider does not list', async () => {
+    const empty = vi.fn(async () => new Response('{}', { status: 200 }));
+    const service = new PriceService({ fetchImpl: empty as unknown as typeof fetch });
+    expect(await service.tokenMetadata('tron', 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7')).toBeNull();
+  });
+
+  it('serves metadata from the price cache instead of asking twice', async () => {
+    const service = new PriceService({ fetchImpl: withMeta as unknown as typeof fetch });
+    await service.quoteMany([
+      { chain: 'tron', type: 'token', symbol: 'WINK', contractAddress: 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7' }
+    ]);
+    const callsAfterPrice = withMeta.mock.calls.length;
+    await service.tokenMetadata('tron', 'TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7');
+    // Pricing the same contract first should leave nothing to look up.
+    expect(withMeta.mock.calls.length).toBe(callsAfterPrice);
+  });
+});
