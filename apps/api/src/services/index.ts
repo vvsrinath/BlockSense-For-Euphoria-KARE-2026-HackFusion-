@@ -21,7 +21,7 @@ import type {
   Wallet
 } from '@blocksense/shared';
 import { ProviderError } from '@blocksense/blockchain';
-import { createAdapter, detectInput, getChain, supportedChains } from '@blocksense/blockchain';
+import { activePriceService, createAdapter, detectInput, getChain, supportedChains } from '@blocksense/blockchain';
 import type { AdapterConfig, BlockchainAdapter, HistoryOptions } from '@blocksense/blockchain';
 import { analyzeTransaction, buildGraph } from '@blocksense/intelligence';
 import type { AnalysisResult } from '@blocksense/intelligence';
@@ -98,7 +98,13 @@ export function inferChain(input: string): ChainId {
 }
 
 export function getTransaction(chain: ChainId, hash: string): Promise<Transaction> {
-  return cache.wrap(cacheKey(chain, 'tx', hash), () => adapterFor(chain).getTransaction(hash));
+  // The cache holds the raw provider result; pricing is applied outside it so
+  // a warm cache still picks up a price change within the TTL.
+  return cache.wrap(cacheKey(chain, 'tx', hash), async () => {
+    const tx = await adapterFor(chain).getTransaction(hash);
+    const [priced] = await activePriceService().enrich([tx]);
+    return priced;
+  });
 }
 
 export function getWallet(chain: ChainId, address: string): Promise<Wallet> {
@@ -115,7 +121,11 @@ export function getHistory(
   options: HistoryOptions = {}
 ): Promise<Transaction[]> {
   const key = cacheKey(chain, 'history', address, options.limit, options.since, options.until);
-  return cache.wrap(key, () => adapterFor(chain).getHistory(address, options));
+  return cache.wrap(key, async () => {
+    const history = await adapterFor(chain).getHistory(address, options);
+    // One batched request for the whole page, not one per transaction.
+    return activePriceService().enrich(history);
+  });
 }
 
 export function getChainTip(chain: ChainId) {

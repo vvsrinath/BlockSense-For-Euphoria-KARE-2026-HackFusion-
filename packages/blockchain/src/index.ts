@@ -8,6 +8,7 @@
 export * from './core/adapter';
 export * from './core/base';
 export * from './core/client';
+export * from './core/prices';
 export * from './core/errors';
 export * from './core/registry';
 export * from './core/resolve';

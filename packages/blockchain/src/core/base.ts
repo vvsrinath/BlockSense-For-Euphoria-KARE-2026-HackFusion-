@@ -17,6 +17,7 @@ import type {
   HistoryOptions
 } from './adapter';
 import { ProviderError } from './errors';
+import { activePriceService } from './prices';
 import type { RequestPolicy } from './client';
 
 export abstract class BaseAdapter implements BlockchainAdapter {
@@ -98,7 +99,12 @@ export abstract class BaseAdapter implements BlockchainAdapter {
       coverage = coverage ?? `Balances are unavailable on ${this.name} right now, so this profile uses history only.`;
     }
 
-    return this.buildWallet(target, history, balances, coverage);
+    // Price before summarising: totals, the median transfer size, and the
+    // behavioural DNA are all computed from `valueUsd`, so enriching afterwards
+    // would leave the headline numbers at zero.
+    const priced = await activePriceService().enrich(history);
+
+    return this.buildWallet(target, priced, balances, coverage);
   }
 
   async getBalances(_address: string): Promise<Balance[]> {

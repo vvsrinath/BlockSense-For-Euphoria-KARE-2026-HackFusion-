@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createApiServer } from '../apps/api/src/index';
 import { resetAdapters, setAdapters } from '../apps/api/src/services/index';
-import { BaseAdapter, ProviderError } from '../packages/blockchain/src/index';
+import { BaseAdapter, PriceService, ProviderError, setPriceService } from '../packages/blockchain/src/index';
 import type { BlockchainAdapter } from '../packages/blockchain/src/index';
 import type { ChainId, Transaction, TransactionAsset, Wallet } from '@blocksense/shared';
 import { transactionFixture, walletFixture } from './fixtures/chain';
@@ -85,10 +85,28 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${port}`;
 });
 
+/**
+ * An offline price source.
+ *
+ * The stubbed adapters above are not enough on their own: pricing is a separate
+ * enrichment, so without this the suite would quietly call a public price API
+ * and its runtime would depend on someone else's uptime. An empty result is the
+ * honest offline answer, and these tests are about routes and adapters rather
+ * than about prices — `tests/prices.test.ts` covers pricing itself.
+ */
+const offlinePrices = new PriceService({
+  fetchImpl: (async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+});
+
 afterEach(() => {
   // Later tests deliberately hit a chain with no stub installed.
   resetAdapters();
   setAdapters({ ethereum: stubChain('ethereum', { transaction, history: [transaction] }) });
+  setPriceService(offlinePrices);
+});
+
+beforeAll(() => {
+  setPriceService(offlinePrices);
 });
 
 afterAll(async () => {
