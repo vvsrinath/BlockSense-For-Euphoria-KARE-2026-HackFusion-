@@ -5,7 +5,7 @@ import { TransactionAnalysisView } from '../components/analysis/TransactionAnaly
 import { Button, EmptyState, ErrorState, LoadingState } from '@blocksense/ui';
 
 import { PageContainer } from '../components/layout/PageContainer';
-import { DEMO_TX_HASH } from '../mock/mockAddresses';
+import { TRON_EXAMPLE_TX } from '../data/exampleIdentifiers';
 import { useProgressiveLoad } from '../hooks/useProgressiveLoad';
 import { detectInput } from '@blocksense/blockchain';
 
@@ -45,7 +45,7 @@ export function TransactionDetails() {
           }
           action={
           <>
-              <Button to={`/analyze/tx/${DEMO_TX_HASH}`}>Open demo transaction</Button>
+              <Button to={`/analyze/tx/${TRON_EXAMPLE_TX}`}>Analyze a real transaction</Button>
               <Button to="/analyze" variant="secondary">
                 New search
               </Button>

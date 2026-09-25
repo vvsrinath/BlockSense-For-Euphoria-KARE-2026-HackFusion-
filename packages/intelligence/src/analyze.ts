@@ -42,10 +42,19 @@ export function analyzeTransaction(
   const dna = buildDna(wallet?.activity ?? [], options);
 
   return {
-    transaction: { ...transaction, anomaly: { score: score.score, level: score.level, signals: signals.map((s) => s.id), details: signals } },
+    transaction: {
+      ...transaction,
+      anomaly: {
+        score: score.score,
+        level: score.level,
+        confidence: score.confidence,
+        signals: signals.map((s) => s.id),
+        details: signals
+      }
+    },
     score,
     findings: toFindings(signals),
-    headline: headlineFor(signals),
+    headline: headlineFor(signals, { hasBaseline: wallet !== null }),
     dna
   };
 }

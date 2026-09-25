@@ -5,7 +5,7 @@ import { AddressDisplay, Button, ChainBadge, LevelBadge } from '@blocksense/ui';
 import { useCopy } from '@blocksense/ui';
 import { formatDate } from '@blocksense/shared';
 import type { Report } from '@blocksense/shared';
-export function ReportCard({ report }: {report: Report;}) {
+export function ReportCard({ report }: {report: Omit<Report, 'sections'>;}) {
   const navigate = useNavigate();
   const { copy } = useCopy();
 

@@ -6,7 +6,7 @@
  * usable from the API and from tests.
  */
 
-import type { NodeKind } from '@blocksense/shared';
+import type { AnomalyLevel, NodeKind } from '@blocksense/shared';
 
 export interface NodeKindInfo {
   kind: NodeKind;
@@ -22,11 +22,12 @@ export const NODE_KIND_INFO: Record<NodeKind, NodeKindInfo> = {
   defi: { kind: 'defi', label: 'DeFi', description: 'A lending, DEX or staking protocol.' },
   contract: { kind: 'contract', label: 'Contract', description: 'A smart contract, not a person.' },
   new: { kind: 'new', label: 'New wallet', description: 'First seen recently.' },
+  elevated: { kind: 'elevated', label: 'Elevated-risk wallet', description: 'Scored as elevated risk.' },
   high: { kind: 'high', label: 'High-anomaly wallet', description: 'Scored as high risk.' }
 };
 
 /** Kinds shown in the graph legend, in display order. Excludes the center node. */
-export const LEGEND_KINDS: NodeKind[] = ['wallet', 'exchange', 'defi', 'contract', 'new', 'high'];
+export const LEGEND_KINDS: NodeKind[] = ['wallet', 'exchange', 'defi', 'contract', 'new', 'elevated', 'high'];
 
 export function nodeKindLabel(kind: NodeKind): string {
   return NODE_KIND_INFO[kind].label;
@@ -35,18 +36,20 @@ export function nodeKindLabel(kind: NodeKind): string {
 /**
  * Choose the kind that best describes an entity.
  *
- * `high` wins over the structural kind because it is the reason an analyst is
- * looking at the node; `center` is assigned by the caller, not inferred.
+ * `high` and `elevated` win over the structural kind because risk is the reason
+ * an analyst is looking at the node; `center` is assigned by the caller, not
+ * inferred. The two risk kinds are kept distinct so a graph can show which
+ * nodes merely warrant a look.
  */
 export function resolveNodeKind(input: {
-  level: 'normal' | 'unusual' | 'high';
+  level: AnomalyLevel;
   firstSeen: number;
   txCount: number;
-  structural: Exclude<NodeKind, 'center' | 'high' | 'new'>;
+  structural: Exclude<NodeKind, 'center' | 'elevated' | 'high' | 'new'>;
   now?: number;
   newAfterDays?: number;
 }): NodeKind {
-  if (input.level === 'high') return 'high';
+  if (input.level === 'high' || input.level === 'elevated') return input.level;
   const ageDays = input.firstSeen ? ((input.now ?? Date.now()) - input.firstSeen) / 86_400_000 : Infinity;
   const newAfterDays = input.newAfterDays ?? 30;
   if (ageDays <= newAfterDays && input.txCount <= 5) return 'new';

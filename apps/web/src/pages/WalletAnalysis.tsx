@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { NetworkIcon, SearchXIcon, WalletIcon } from 'lucide-react';
-import { allWallets, getWallet } from '../services/wallets';
+import { listKnownWallets, getWallet } from '../services/wallets';
 import { BehaviorChart } from '../components/analysis/BehaviorChart';
 import { Button, EmptyState, ErrorState, LoadingState } from '@blocksense/ui';
 
@@ -11,17 +11,26 @@ import { BehaviorDNA } from '../components/wallet/BehaviorDNA';
 import { WalletActivity } from '../components/wallet/WalletActivity';
 import { WalletSummary } from '../components/wallet/WalletSummary';
 import { WatchButton } from '../components/watchlist/WatchButton';
+import { useAsync } from '../hooks/useAsync';
 import { useProgressiveLoad } from '../hooks/useProgressiveLoad';
 import { getChain, detectInput } from '@blocksense/blockchain';
 
 import { truncateMiddle } from '@blocksense/shared';
+import type { Wallet } from '@blocksense/shared';
 
 const STEPS = ['Wallet found', 'Transaction history loaded', 'Behavior profile built', 'Relationships mapped'];
 
-function ExampleWallets() {
+/** Wallets this browser has already opened, so the empty state is not a dead end. */
+function KnownWallets() {
+  const known = useAsync(listKnownWallets, 'known-wallets');
+  if (!known.data || known.data.length === 0) return null;
+  return <ExampleWallets wallets={known.data} />;
+}
+
+function ExampleWallets({ wallets }: { wallets: Wallet[] }) {
   return (
     <div className="flex flex-wrap justify-center gap-2">
-      {allWallets().
+      {wallets.
       slice(0, 4).
       map((w) =>
       <Link
@@ -48,14 +57,14 @@ function WalletView({ address }: {address: string;}) {
     return (
       <EmptyState
         icon={SearchXIcon}
-        title={isAddress ? "This wallet isn't in the demo dataset" : "We couldn't identify this input."}
+        title={isAddress ? "We couldn't build a profile for this wallet" : "We couldn't identify this input."}
         description={
-        isAddress ?
-        'Live wallet lookups activate once the BlockSense backend is connected. Try one of the demo wallets below.' :
-        'Check the address and try again.'
-        }>
-        
-        <ExampleWallets />
+          isAddress
+            ? 'The address is valid, but its chain returned no activity. It may be a contract, or an address that has never transacted.'
+            : 'Check the address and try again.'
+        }
+      >
+        <KnownWallets />
       </EmptyState>);
 
   }
@@ -98,8 +107,8 @@ export function WalletAnalysis() {
           <PageHeader title="Wallet analysis" description="Understand how a wallet usually behaves — and what has changed." />
           <EmptyState icon={WalletIcon} title="No wallet selected" description="Search for a wallet address to begin analysis.">
             <SearchBox size="lg" placeholder="Enter wallet address" autoFocus />
-            <p className="mb-3 mt-6 text-sm text-muted">Or open a demo wallet</p>
-            <ExampleWallets />
+            <p className="mb-3 mt-6 text-sm text-muted">Or reopen a wallet you have viewed</p>
+            <KnownWallets />
           </EmptyState>
         </>
       }

@@ -5,7 +5,7 @@ import { Button, Panel } from '@blocksense/ui';
 import { PageContainer } from '../components/layout/PageContainer';
 import { PageHeader } from '../components/layout/PageHeader';
 import { journeySteps } from '../data/features';
-import { DEMO_TX_HASH } from '../mock/mockAddresses';
+import { TRON_EXAMPLE_TX } from '../data/exampleIdentifiers';
 
 const glossary = [
 { term: 'Transaction hash', definition: 'A unique ID for a single transaction. Paste it into search to see what happened.' },
@@ -33,7 +33,7 @@ export function Help() {
                 </li>
               )}
             </ol>
-            <Button to={`/analyze/tx/${DEMO_TX_HASH}`} variant="soft" className="mt-6">
+            <Button to={`/analyze/tx/${TRON_EXAMPLE_TX}`} variant="soft" className="mt-6">
               Walk through the demo
             </Button>
           </Panel>

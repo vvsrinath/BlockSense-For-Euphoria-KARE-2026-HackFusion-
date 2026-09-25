@@ -6,8 +6,8 @@
  * after install, which is the property that matters most for a project people
  * are meant to fork and experiment with.
  *
- * The web app is a separate process in development and proxies `/api` here, so
- * the browser only ever talks to one origin.
+ * The web app is a separate origin and calls `/api/v1` here, so the browser
+ * only ever talks to one API contract.
  */
 
 import { createServer } from 'node:http';
@@ -19,28 +19,55 @@ import { cors } from './middleware/cors';
 import { sendError } from './middleware/errors';
 import { logger, requestId, setLogLevel } from './middleware/logger';
 import { readJsonBody } from './middleware/router';
+import { RateLimiter, clientKey, securityHeaders } from './middleware/security';
 import { createRouter } from './routes/index';
 
 const router = createRouter();
+const rateLimiter = new RateLimiter(config.rateLimit);
 
-function sendJson(res: ServerResponse, status: number, payload: unknown, id: string): void {
+/** The success envelope from the API contract. */
+function sendData(res: ServerResponse, status: number, data: unknown, id: string): void {
   if (res.headersSent) return;
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'x-request-id': id
   });
-  res.end(JSON.stringify(payload));
+  res.end(JSON.stringify({ success: true, data, meta: { requestId: id, timestamp: Date.now() } }));
+}
+
+/** The failure envelope. Sent directly so a 404 is never wrapped as a success. */
+function sendFailure(res: ServerResponse, status: number, body: unknown, id: string): void {
+  if (res.headersSent) return;
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'x-request-id': id
+  });
+  res.end(JSON.stringify(body));
+}
+
+function sendNotFound(res: ServerResponse, method: string, pathname: string, id: string): void {
+  sendFailure(
+    res,
+    404,
+    {
+      success: false,
+      error: { code: 'NOT_FOUND', message: `No route for ${method} ${pathname}.` },
+      meta: { requestId: id }
+    },
+    id
+  );
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const id = (req.headers['x-request-id'] as string | undefined) ?? requestId();
   const started = Date.now();
-  const origin = req.headers.origin;
   const method = req.method ?? 'GET';
 
-  cors(origin, res);
+  securityHeaders(res);
+  cors(req.headers.origin, res);
 
-  // Preflight never carries a body, so answer it before routing.
+  // Preflight carries no body, so answer it before routing and before spending
+  // a rate limit token on a request that does no work.
   if (method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
@@ -49,30 +76,48 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
 
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
+  // Health checks are how a platform router learns whether the process is alive.
+  // Charging them quota means a monitoring ping could throttle real users.
+  const isHealth = url.pathname.endsWith('/health') || url.pathname.endsWith('/health/chains');
+
+  if (!isHealth) {
+    const limit = rateLimiter.check(clientKey(req));
+    res.setHeader('x-ratelimit-limit', String(config.rateLimit.maxRequests));
+    res.setHeader('x-ratelimit-remaining', String(limit.remaining));
+    res.setHeader('x-ratelimit-reset', String(limit.resetAt));
+
+    if (!limit.allowed) {
+      res.setHeader('retry-after', String(limit.retryAfterSeconds));
+      sendFailure(
+        res,
+        429,
+        {
+          success: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message: `Too many requests. Try again in ${limit.retryAfterSeconds}s.`
+          },
+          meta: { requestId: id }
+        },
+        id
+      );
+      return;
+    }
+  }
+
   logger.debug('Request received', { id, method, path: url.pathname });
 
   try {
     const matched = router.match(method, url.pathname);
     if (!matched) {
-      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: `No route for ${method} ${url.pathname}.` } }, id);
+      sendNotFound(res, method, url.pathname, id);
       return;
     }
 
-    const body = method === 'POST' || method === 'PUT' || method === 'PATCH'
-      ? await readJsonBody(req)
-      : undefined;
+    const body = method === 'POST' || method === 'PUT' || method === 'PATCH' ? await readJsonBody(req) : undefined;
 
-    const result = await matched.handler({
-      req,
-      res,
-      params: matched.params,
-      query: url.searchParams,
-      body,
-      id
-    });
-
-    const status = result === undefined ? 204 : 200;
-    sendJson(res, status, result ?? null, id);
+    const result = await matched.handler({ req, res, params: matched.params, query: url.searchParams, body, id });
+    sendData(res, 200, result ?? null, id);
   } catch (err) {
     sendError(err, res, id);
   } finally {
@@ -91,16 +136,23 @@ export function createApiServer() {
 // containing spaces is percent-encoded in the URL, so string comparison would
 // silently never match.
 const isDirectRun =
-  process.argv[1] !== undefined &&
-  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isDirectRun) {
   setLogLevel(config.logLevel);
+
+  if (!config.useLiveData) {
+    // Loud, because a stale `USE_LIVE_DATA=false` would otherwise silently
+    // leave the app reading real chains while claiming to be in demo mode.
+    logger.warn('USE_LIVE_DATA is false. BlockSense serves live chain data regardless.');
+  }
+
   createApiServer().listen(config.port, config.host, () => {
     logger.info('BlockSense API listening', {
-      url: `http://localhost:${config.port}/api`,
+      url: `http://localhost:${config.port}/api/v1`,
       env: config.env,
-      data: config.useLiveData ? 'live' : 'mock'
+      data: 'live',
+      chains: ['ethereum', 'bnb', 'tron', 'solana', 'bitcoin']
     });
   });
 }

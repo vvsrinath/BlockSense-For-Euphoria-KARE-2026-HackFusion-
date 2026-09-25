@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 export const ChainIdSchema = z.enum(['bitcoin', 'ethereum', 'bnb', 'tron', 'solana']);
 
-export const AnomalyLevelSchema = z.enum(['normal', 'unusual', 'high']);
+export const AnomalyLevelSchema = z.enum(['normal', 'unusual', 'elevated', 'high']);
 
 export const AddressSchema = z.string().min(8).max(128);
 

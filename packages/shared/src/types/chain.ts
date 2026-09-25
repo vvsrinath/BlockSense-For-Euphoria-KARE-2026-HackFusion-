@@ -1,7 +1,15 @@
 export type ChainId = 'bitcoin' | 'ethereum' | 'bnb' | 'tron' | 'solana';
 export type ChainFilter = ChainId | 'all';
 
-export type AnomalyLevel = 'normal' | 'unusual' | 'high';
+/**
+ * Severity of an observed behaviour.
+ *
+ * `elevated` sits between `unusual` and `high` so that "worth a look" and
+ * "act now" are different claims. Collapsing them into one label made every
+ * non-trivial finding read as urgent, which is the failure mode a risk score is
+ * supposed to avoid.
+ */
+export type AnomalyLevel = 'normal' | 'unusual' | 'elevated' | 'high';
 export type SignalLevel = AnomalyLevel | 'info';
 
 export interface ChainInfo {

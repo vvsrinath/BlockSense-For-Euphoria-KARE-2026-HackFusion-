@@ -26,9 +26,18 @@ export interface AnomalySignal {
   level: SignalLevel;
 }
 
+/**
+ * How much evidence an anomaly judgement rests on.
+ *
+ * Deliberately separate from the level: a high score with low confidence is a
+ * prompt to investigate, not a finding.
+ */
+export type Confidence = 'low' | 'medium' | 'high';
+
 export interface TransactionAnomaly {
   score: number;
   level: AnomalyLevel;
+  confidence: Confidence;
   signals: string[];
   details: AnomalySignal[];
 }

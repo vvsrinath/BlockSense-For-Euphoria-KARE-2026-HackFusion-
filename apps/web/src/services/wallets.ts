@@ -1,114 +1,152 @@
-import { mockWallets } from '../mock/mockWallets';
-import { createRandom, fakeAddress, fakeHash, hashString } from '@blocksense/shared';
-import type { BehaviorPoint, BehaviorRange, Wallet, WalletActivity } from '@blocksense/shared';
-import { mockRequest, sameValue } from '@blocksense/blockchain';
+import { api } from './api';
+import { knownWallet, recentWallets, rememberWallet } from './workspace';
+import { detectInput } from '@blocksense/blockchain';
+import type { BehaviorPoint, BehaviorRange, ChainId, Transaction, Wallet, WalletActivity } from '@blocksense/shared';
 
-const DAY = 86400000;
-const DEMO_PRICES: Record<string, number> = { BTC: 64840, ETH: 3534, SOL: 140, BNB: 595, TRX: 0.232, USDC: 1, USDT: 1 };
+const DAY = 86_400_000;
 
+/** Fetch a wallet profile and remember it for the local history list. */
+export async function getWallet(address: string, chain?: ChainId): Promise<Wallet> {
+  const resolved = chain ?? detectInput(address).chains[0] ?? 'ethereum';
+  const wallet = await api.wallet(resolved, address);
+  rememberWallet(wallet);
+  return wallet;
+}
+
+/** The stored copy of a wallet, for synchronous rendering. */
 export function findWallet(address: string): Wallet | undefined {
-  return mockWallets.find((w) => sameValue(w.address, address));
+  return knownWallet(address);
 }
 
-export function allWallets(): Wallet[] {
-  return mockWallets;
+/** Wallets opened in this workspace. */
+export async function listKnownWallets(): Promise<Wallet[]> {
+  return recentWallets();
 }
 
-export async function getWallet(address: string): Promise<Wallet | null> {
-  return mockRequest(() => findWallet(address) ?? null, 180);
-}
-
-function olderActivity(wallet: Wallet, count: number): WalletActivity[] {
-  const rand = createRandom(hashString(`${wallet.address}:activity`));
-  const start = wallet.activity.length ? wallet.activity[wallet.activity.length - 1].timestamp : wallet.lastActive;
-  const rows: WalletActivity[] = [];
-  let ts = start;
-  for (let i = 0; i < count; i += 1) {
-    ts -= Math.round(7 / wallet.dna.txPerWeek * DAY * (0.4 + rand() * 1.2));
-    const value = Math.round(wallet.dna.medianUsd * (0.5 + rand()));
-    rows.push({
-      hash: fakeHash(rand, wallet.chain),
-      direction: rand() > 0.5 ? 'in' : 'out',
-      counterparty: fakeAddress(rand, wallet.chain),
-      symbol: wallet.dna.commonAsset,
-      amount: String(Number((value / (DEMO_PRICES[wallet.dna.commonAsset] ?? 1)).toFixed(4))),
-      valueUsd: value,
-      timestamp: ts,
-      level: 'normal'
-    });
-  }
-  return rows;
-}
-
+/**
+ * Wallet activity, paginated.
+ *
+ * Slicing happens here rather than in the browser because the API returns a
+ * bounded page; requesting a page the chain cannot supply would be a lie about
+ * what is on-chain.
+ */
 export async function getWalletActivity(
-address: string,
-page: number,
-pageSize: number)
-: Promise<{rows: WalletActivity[];total: number;}> {
-  return mockRequest(() => {
-    const wallet = findWallet(address);
-    if (!wallet) return { rows: [], total: 0 };
-    const total = Math.min(wallet.txCount, 40);
-    const all = [...wallet.activity, ...olderActivity(wallet, total - wallet.activity.length)];
-    return { rows: all.slice(page * pageSize, page * pageSize + pageSize), total };
-  }, 90);
+  address: string,
+  page: number,
+  pageSize: number,
+  chain?: ChainId
+): Promise<{ rows: WalletActivity[]; total: number }> {
+  const resolved = chain ?? detectInput(address).chains[0] ?? 'ethereum';
+  const history = await api.walletHistory(resolved, address, Math.max(page * pageSize + pageSize, pageSize));
+
+  const rows = history
+    .slice(page * pageSize, page * pageSize + pageSize)
+    .map((tx: Transaction) => toActivity(tx, address));
+
+  return { rows, total: history.length };
 }
 
-const RANGE_STEPS: Record<Exclude<BehaviorRange, 'ALL'>, {points: number;stepDays: number;monthly: boolean;}> = {
+function toActivity(tx: Transaction, focus: string): WalletActivity {
+  const outgoing = tx.from.toLowerCase() === focus.toLowerCase();
+  return {
+    hash: tx.hash,
+    direction: outgoing ? 'out' : 'in',
+    counterparty: outgoing ? tx.to : tx.from,
+    symbol: tx.asset.symbol,
+    amount: tx.asset.amount ?? '0',
+    valueUsd: tx.asset.valueUsd ?? 0,
+    timestamp: tx.timestamp,
+    level: tx.anomaly?.level ?? 'normal'
+  };
+}
+
+const RANGE_DAYS: Record<Exclude<BehaviorRange, 'ALL'>, { points: number; stepDays: number; monthly: boolean }> = {
   '7D': { points: 7, stepDays: 1, monthly: false },
   '30D': { points: 30, stepDays: 1, monthly: false },
   '90D': { points: 13, stepDays: 7, monthly: false },
-  '1Y': { points: 12, stepDays: 30.4, monthly: true }
+  '1Y': { points: 12, stepDays: 30, monthly: true }
 };
 
-function rangeConfig(wallet: Wallet, range: BehaviorRange) {
-  if (range !== 'ALL') return RANGE_STEPS[range];
-  const days = (wallet.lastActive - wallet.firstSeen) / DAY;
+/**
+ * Bucket real transactions into a behaviour series.
+ *
+ * This used to synthesise a plausible-looking series from a seeded random
+ * number. A chart of invented data is worse than an empty one, so each point
+ * now counts what actually happened in that window, and windows with no
+ * activity read as zero rather than being padded into a nicer shape.
+ *
+ * `focus` is the wallet being charted: without it, inbound and outbound cannot
+ * be told apart, because a transaction on its own says only who sent it.
+ */
+export function buildBehaviorSeries(
+  history: Transaction[],
+  range: BehaviorRange,
+  focus?: string,
+  now = Date.now()
+): BehaviorPoint[] {
+  const { points, stepDays, monthly } = rangeConfig(history, range, now);
+
+  const buckets: BehaviorPoint[] = Array.from({ length: points }, (_, i) => {
+    const end = now - (points - 1 - i) * stepDays * DAY;
+    return {
+      label: new Intl.DateTimeFormat(
+        'en-US',
+        monthly
+          ? { month: 'short', year: '2-digit', timeZone: 'UTC' }
+          : { month: 'short', day: 'numeric', timeZone: 'UTC' }
+      ).format(end),
+      inCount: 0,
+      outCount: 0,
+      inAvg: 0,
+      outAvg: 0,
+      inVolume: 0,
+      outVolume: 0
+    };
+  });
+
+  const span = stepDays * DAY;
+  const first = now - points * span;
+  const focusLower = focus?.toLowerCase();
+
+  for (const tx of history) {
+    if (tx.timestamp < first || tx.timestamp > now) continue;
+    // The oldest window is cut off by the range, so counting it would
+    // under-report. Skip it rather than show a misleading dip.
+    if (tx.timestamp < first + span) continue;
+
+    const bucket = buckets[Math.min(points - 1, Math.floor((tx.timestamp - first) / span))];
+    if (!bucket) continue;
+
+    const value = tx.asset.valueUsd ?? 0;
+    const outgoing = focusLower ? tx.from.toLowerCase() === focusLower : false;
+
+    if (outgoing) {
+      bucket.outCount += 1;
+      bucket.outVolume += value;
+      bucket.outAvg = bucket.outVolume / bucket.outCount;
+    } else {
+      bucket.inCount += 1;
+      bucket.inVolume += value;
+      bucket.inAvg = bucket.inVolume / bucket.inCount;
+    }
+  }
+
+  return buckets;
+}
+
+function rangeConfig(history: Transaction[], range: BehaviorRange, now: number) {
+  if (range !== 'ALL') return RANGE_DAYS[range];
+  const oldest = history.reduce((min, tx) => Math.min(min, tx.timestamp), now);
+  const days = Math.max(1, (now - oldest) / DAY);
   return { points: Math.min(16, Math.max(4, Math.ceil(days / 91))), stepDays: 91, monthly: true };
 }
 
-export function buildBehaviorSeries(wallet: Wallet, range: BehaviorRange): BehaviorPoint[] {
-  const rand = createRandom(hashString(wallet.address + range));
-  const { points, stepDays, monthly } = rangeConfig(wallet, range);
-  const perDay = wallet.dna.txPerWeek / 7;
-  const fmt = new Intl.DateTimeFormat('en-US', monthly ? { month: 'short', year: '2-digit', timeZone: 'UTC' } : { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const out: BehaviorPoint[] = [];
-
-  for (let i = 0; i < points; i += 1) {
-    const date = wallet.lastActive - (points - 1 - i) * stepDays * DAY;
-    const expected = perDay * stepDays;
-    let inCount = Math.max(0, Math.round(expected * 0.48 * (0.6 + rand() * 0.8)));
-    let outCount = Math.max(0, Math.round(expected * 0.52 * (0.6 + rand() * 0.8)));
-    const inAvg = Math.round(wallet.dna.medianUsd * (0.75 + rand() * 0.5));
-    let outAvg = Math.round(wallet.dna.medianUsd * (0.75 + rand() * 0.5));
-
-    if (wallet.spike && i === points - 1) {
-      if (range === '7D' || range === '30D') {
-        outCount = Math.max(outCount, Math.round(Math.max(3, expected) * 8));
-        outAvg = Math.round(wallet.dna.medianUsd * 12.5);
-      } else {
-        outCount += 20;
-        outAvg = Math.round(outAvg * 2.4);
-      }
-      inCount = Math.max(inCount, 1);
-    }
-
-    out.push({
-      label: fmt.format(date),
-      inCount,
-      outCount,
-      inAvg,
-      outAvg,
-      inVolume: inCount * inAvg,
-      outVolume: outCount * outAvg
-    });
-  }
-  return out;
-}
-
-export async function getBehaviorSeries(address: string, range: BehaviorRange): Promise<BehaviorPoint[]> {
-  return mockRequest(() => {
-    const wallet = findWallet(address);
-    return wallet ? buildBehaviorSeries(wallet, range) : [];
-  }, 60);
+export async function getBehaviorSeries(
+  address: string,
+  range: BehaviorRange,
+  chain?: ChainId
+): Promise<BehaviorPoint[]> {
+  const resolved = chain ?? detectInput(address).chains[0] ?? 'ethereum';
+  const history = await api.walletHistory(resolved, address, 200);
+  return buildBehaviorSeries(history, range, address);
 }

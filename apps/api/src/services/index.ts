@@ -5,6 +5,9 @@
  * This is also the only place that knows how a chain adapter, the transaction
  * engine and the intelligence layer fit together — which is exactly the
  * separation that lets a new chain be added without touching the API.
+ *
+ * Every provider read goes through the TTL cache, and every write-shaped read is
+ * bounded by the configured graph limits.
  */
 
 import type {
@@ -22,26 +25,64 @@ import { createAdapter, detectInput, getChain, supportedChains } from '@blocksen
 import type { AdapterConfig, BlockchainAdapter, HistoryOptions } from '@blocksense/blockchain';
 import { analyzeTransaction, buildGraph } from '@blocksense/intelligence';
 import type { AnalysisResult } from '@blocksense/intelligence';
-import { config } from '../config/index';
+import { config, requestPolicy } from '../config/index';
+import { TtlCache, cacheKey } from '../middleware/cache';
 
-/**
- * Adapters are memoised so a burst of requests reuses one set of connections
- * instead of building a new client per call.
- */
+/** Shared across adapters so a second identical request costs nothing. */
+const cache = new TtlCache({ ttlMs: config.cacheTtlSeconds * 1000, maxEntries: 500 });
+
+/** Deepest network expansion the API will accept, matching the published limit. */
+const MAX_GRAPH_DEPTH = 3;
+
+/** Adapters are memoised so a burst of requests reuses one set of connections. */
 const adapters = new Map<ChainId, BlockchainAdapter>();
+
+/** Per-chain provider credentials, all optional and all server-side only. */
+function adapterConfig(chain: ChainId): AdapterConfig {
+  const base = { policy: { ...requestPolicy } };
+  switch (chain) {
+    case 'ethereum':
+      return { ...base, rpcUrl: config.ethereum.rpcUrl, apiKey: config.ethereum.apiKey };
+    case 'bnb':
+      return { ...base, rpcUrl: config.bnb.rpcUrl, apiKey: config.bnb.apiKey };
+    case 'tron':
+      return { ...base, rpcUrl: config.tron.rpcUrl, apiKey: config.tron.apiKey };
+    case 'solana':
+      return { ...base, rpcUrl: config.solana.rpcUrl, apiKey: config.solana.apiKey };
+    case 'bitcoin':
+      return { ...base, rpcUrl: config.bitcoin.rpcUrl, apiKey: config.bitcoin.apiKey };
+  }
+}
 
 export function adapterFor(chain: ChainId): BlockchainAdapter {
   const existing = adapters.get(chain);
   if (existing) return existing;
 
-  const overrides: AdapterConfig = { latency: config.mockLatency };
-  // An empty rpcUrl forces the mock transport. Without this, a developer who has
-  // an RPC key exported locally would silently hit the network in a demo run.
-  if (!config.useLiveData) overrides.rpcUrl = '';
-
-  const adapter = createAdapter(chain, overrides);
+  const adapter = createAdapter(chain, adapterConfig(chain));
   adapters.set(chain, adapter);
   return adapter;
+}
+
+/**
+ * Install a fixed set of adapters.
+ *
+ * Adapters are the only thing in the API that touches the network, so this is
+ * the seam that lets the route, envelope, validation and error-mapping tests run
+ * without a provider — and it is the same seam a future indexer implementation
+ * would use to swap one chain's data source.
+ */
+export function setAdapters(next: Partial<Record<ChainId, BlockchainAdapter>>): void {
+  adapters.clear();
+  cache.clear();
+  for (const [chain, adapter] of Object.entries(next)) {
+    adapters.set(chain as ChainId, adapter);
+  }
+}
+
+/** Drop any installed adapters and cached reads, returning to live providers. */
+export function resetAdapters(): void {
+  adapters.clear();
+  cache.clear();
 }
 
 /**
@@ -57,15 +98,15 @@ export function inferChain(input: string): ChainId {
 }
 
 export function getTransaction(chain: ChainId, hash: string): Promise<Transaction> {
-  return adapterFor(chain).getTransaction(hash);
+  return cache.wrap(cacheKey(chain, 'tx', hash), () => adapterFor(chain).getTransaction(hash));
 }
 
 export function getWallet(chain: ChainId, address: string): Promise<Wallet> {
-  return adapterFor(chain).getWallet(address);
+  return cache.wrap(cacheKey(chain, 'wallet', address), () => adapterFor(chain).getWallet(address));
 }
 
 export function getAsset(chain: ChainId, identifier: string): Promise<Asset> {
-  return adapterFor(chain).getAsset(identifier);
+  return cache.wrap(cacheKey(chain, 'asset', identifier), () => adapterFor(chain).getAsset(identifier));
 }
 
 export function getHistory(
@@ -73,7 +114,12 @@ export function getHistory(
   address: string,
   options: HistoryOptions = {}
 ): Promise<Transaction[]> {
-  return adapterFor(chain).getHistory(address, options);
+  const key = cacheKey(chain, 'history', address, options.limit, options.since, options.until);
+  return cache.wrap(key, () => adapterFor(chain).getHistory(address, options));
+}
+
+export function getChainTip(chain: ChainId) {
+  return cache.wrap(cacheKey(chain, 'tip'), () => adapterFor(chain).getTip());
 }
 
 /**
@@ -81,10 +127,25 @@ export function getHistory(
  *
  * The neighbourhood is derived from the wallet's own history rather than taken
  * from the provider, so every chain gets the same shape of graph. Expansion is
- * bounded inside `buildGraph`, which is what stops a hub account from
- * producing an unusable response.
+ * bounded by `MAX_GRAPH_NODES`/`MAX_GRAPH_EDGES`, which is what stops a hub
+ * account from producing an unusable response.
+ */
+/**
+ * The counterparty graph for an address.
+ *
+ * Depth is accepted and validated but the traversal is currently one hop: the
+ * nodes are built from the focus address's own observed history, which is what a
+ * node-level provider can answer without an indexer. Widening this is the job of
+ * an indexer, not of guessing at second-hop relationships.
  */
 export async function getNetwork(chain: ChainId, address: string, depth = 2): Promise<NetworkGraphData> {
+  // Reject an out-of-range depth rather than quietly clamping it. A client that
+  // asked for depth 9 and silently received 2 has no way to know its request was
+  // reduced, and would draw conclusions from a shallower graph than it asked for.
+  if (!Number.isInteger(depth) || depth < 1 || depth > MAX_GRAPH_DEPTH) {
+    throw new ProviderError('NETWORK_LIMIT_EXCEEDED', `depth must be a whole number between 1 and ${MAX_GRAPH_DEPTH}.`);
+  }
+
   const focus = address.trim();
   const history = await getHistory(chain, focus, { limit: 200, order: 'desc' });
 
@@ -115,6 +176,9 @@ export async function getNetwork(chain: ChainId, address: string, depth = 2): Pr
       existingEntity.txCount += 1;
       existingEntity.totalUsd += volume;
     } else {
+      // Stop early rather than truncating afterwards, so the focus node keeps
+      // its full transaction count and the graph stays self-consistent.
+      if (entities.size >= config.maxGraphNodes) continue;
       entities.set(counterparty, {
         id: counterparty,
         address: counterparty,
@@ -136,6 +200,7 @@ export async function getNetwork(chain: ChainId, address: string, depth = 2): Pr
       existingLink.volumeUsd += volume;
       existingLink.flagged = existingLink.flagged || level === 'high';
     } else {
+      if (links.size >= config.maxGraphEdges) continue;
       links.set(linkId, {
         id: linkId,
         source: focus,
@@ -190,12 +255,53 @@ export function listChains(): (ChainInfo & { live: boolean })[] {
   return supportedChains().map((id) => ({ ...getChain(id), live: adapterFor(id).isLive }));
 }
 
-/** Health, including live-vs-mocked state per chain. */
+export interface ChainHealth {
+  id: ChainId;
+  live: boolean;
+  status: 'up' | 'down';
+  height?: number;
+  unit?: string;
+  error?: string;
+  latencyMs?: number;
+}
+
+/**
+ * Probe every chain's tip.
+ *
+ * A chain that is rate limited or down is reported as `down` rather than
+ * failing the whole health check — partial availability is the normal state of a
+ * public multi-chain front end, and the UI needs to know which chains to trust.
+ */
+export async function chainHealth(): Promise<ChainHealth[]> {
+  return Promise.all(
+    supportedChains().map(async (id): Promise<ChainHealth> => {
+      const live = adapterFor(id).isLive;
+      const started = Date.now();
+      try {
+        const tip = await getChainTip(id);
+        return { id, live, status: 'up', height: tip.height, unit: tip.unit, latencyMs: Date.now() - started };
+      } catch (err) {
+        return {
+          id,
+          live,
+          status: 'down',
+          latencyMs: Date.now() - started,
+          error: err instanceof ProviderError ? `${err.code}: ${err.message}` : 'Unreachable'
+        };
+      }
+    })
+  );
+}
+
 export function health() {
   return {
     status: 'ok' as const,
     env: config.env,
-    useLiveData: config.useLiveData,
+    dataSource: 'live' as const,
+    uptimeSeconds: Math.round(process.uptime()),
+    cache: cache.stats(),
     chains: supportedChains().map((id) => ({ id, live: adapterFor(id).isLive }))
   };
 }
+
+export { cache };

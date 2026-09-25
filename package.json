@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:env": "tsx scripts/check-env.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts",
+    "smoke:analysis": "tsx scripts/smoke-analysis.ts",
     "setup": "tsx scripts/setup.ts",
     "clean": "rimraf \"apps/*/dist\" \"packages/*/dist\" \"*.tsbuildinfo\"",
     "lint:fix": "eslint . --fix"

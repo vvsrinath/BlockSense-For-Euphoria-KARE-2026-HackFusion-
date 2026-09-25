@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeftRightIcon, ArrowRightIcon, BoxIcon, InfoIcon, LoaderCircleIcon, ScanSearchIcon, SearchIcon, TriangleAlertIcon, WalletIcon } from 'lucide-react';
 import { ChainSelector } from './ChainSelector';
 import { useSettings } from '../../stores/SettingsContext';
-import { DEMO_TX_HASH } from '../../mock/mockAddresses';
+import { TRON_EXAMPLE_TX } from '../../data/exampleIdentifiers';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useSearchSubmit, type SearchFeedback } from '../../hooks/useSearchSubmit';
 import { cn, truncateMiddle } from '@blocksense/shared';
@@ -122,7 +122,7 @@ export function SearchBox({ size = 'md', placeholder = 'Search transaction hash,
 
           <div className="px-1 py-1">
                 <Link
-              to={`/analyze/tx/${DEMO_TX_HASH}`}
+              to={`/analyze/tx/${TRON_EXAMPLE_TX}`}
               onClick={close}
               className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-ink hover:bg-subtle">
               

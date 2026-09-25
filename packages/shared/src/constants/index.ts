@@ -5,23 +5,31 @@ export const LEVEL_SEVERITY: Record<AnomalyLevel | SignalLevel, number> = {
   info: 0,
   normal: 0,
   unusual: 1,
-  high: 2
+  elevated: 2,
+  high: 3
 };
 
-export const ANOMALY_LEVELS: AnomalyLevel[] = ['normal', 'unusual', 'high'];
+export const ANOMALY_LEVELS: AnomalyLevel[] = ['normal', 'unusual', 'elevated', 'high'];
 
 /** Human-readable labels for a level. Presentation-neutral, safe for the API. */
 export const LEVEL_LABELS: Record<AnomalyLevel | SignalLevel, string> = {
   normal: 'Normal',
   info: 'Info',
   unusual: 'Unusual',
+  elevated: 'Elevated',
   high: 'High'
 };
 
-/** Score bands that map a numeric 0-100 anomaly score onto a level. */
+/**
+ * Score bands that map a numeric 0-100 anomaly score onto a level.
+ *
+ * The boundaries are the published contract:
+ * normal 0-29, unusual 30-59, elevated 60-79, high 80-100.
+ */
 export const SCORE_THRESHOLDS = {
-  unusual: 40,
-  high: 70
+  unusual: 30,
+  elevated: 60,
+  high: 80
 } as const;
 
 /** Every chain BlockSense can analyse. */

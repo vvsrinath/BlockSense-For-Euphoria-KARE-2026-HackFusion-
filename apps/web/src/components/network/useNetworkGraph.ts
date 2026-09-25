@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buildLinks, expandEntity } from '../../services/network';
+import { buildLinks, getNetwork } from '../../services/network';
 import type { NetworkEntity, NetworkGraphData } from '@blocksense/shared';
 
 const MAX_NODES = 40;
@@ -23,26 +23,48 @@ export function useNetworkGraph(data: NetworkGraphData) {
 
   const links = useMemo(() => buildLinks(entities, data.centerId), [entities, data.centerId]);
 
+  /**
+   * Expand a node by asking the API for that entity's own neighbourhood.
+   *
+   * The previous implementation invented child nodes locally. A graph of
+   * fabricated counterparties is exactly the kind of thing this product is
+   * supposed to help people distrust, so expansion now costs a provider call
+   * and returns real addresses or nothing.
+   */
   const addChildren = useCallback(
-    (parents: NetworkEntity[]) => {
-      setEntities((prev) => {
-        const ids = new Set(prev.map((e) => e.id));
-        const additions = parents.flatMap((p) => expandEntity(p, data.chain)).filter((c) => !ids.has(c.id));
-        return [...prev, ...additions].slice(0, MAX_NODES);
-      });
+    async (parents: NetworkEntity[]) => {
       setExpanded((prev) => {
         const next = new Set(prev);
         parents.forEach((p) => next.add(p.id));
         return next;
       });
+
+      for (const parent of parents) {
+        let graph: Awaited<ReturnType<typeof getNetwork>>;
+        try {
+          graph = await getNetwork(parent.address, data.chain, 1);
+        } catch {
+          // A node with no indexable history simply does not expand.
+          continue;
+        }
+
+        setEntities((prev) => {
+          const ids = new Set(prev.map((e) => e.id));
+          const additions = graph.entities
+            .filter((c) => c.id !== data.centerId && c.id !== parent.id && !ids.has(c.id))
+            .map((c) => ({ ...c, parentId: parent.id }));
+          if (additions.length === 0) return prev;
+          return [...prev, ...additions].slice(0, MAX_NODES);
+        });
+      }
     },
-    [data.chain]
+    [data.chain, data.centerId]
   );
 
   const expand = useCallback(
     (id: string) => {
       const parent = entities.find((e) => e.id === id);
-      if (parent && !expanded.has(id)) addChildren([parent]);
+      if (parent && !expanded.has(id)) void addChildren([parent]);
     },
     [entities, expanded, addChildren]
   );
@@ -57,7 +79,7 @@ export function useNetworkGraph(data: NetworkGraphData) {
   );
 
   const expandNetwork = useCallback(() => {
-    if (expandableFirstRing.length) addChildren(expandableFirstRing);
+    if (expandableFirstRing.length) void addChildren(expandableFirstRing);
   }, [expandableFirstRing, addChildren]);
 
   const hide = useCallback(

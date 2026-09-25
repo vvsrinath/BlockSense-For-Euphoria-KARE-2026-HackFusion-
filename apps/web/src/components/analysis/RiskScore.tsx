@@ -1,8 +1,9 @@
 import { InfoIcon } from 'lucide-react';
 import { LevelBadge } from '@blocksense/ui';
 import { cn } from '@blocksense/shared';
-import type { TransactionAnomaly } from '@blocksense/shared';
+import type { Confidence, TransactionAnomaly } from '@blocksense/shared';
 import { levelHeadline } from '@blocksense/intelligence';
+import { SCORE_THRESHOLDS } from '@blocksense/shared';
 import { levelStyles } from '@blocksense/ui';
 
 interface RiskScoreProps {
@@ -13,9 +14,29 @@ interface RiskScoreProps {
 const RADIUS = 52;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+/**
+ * The published score bands.
+ *
+ * Derived from `SCORE_THRESHOLDS` rather than written out, because a hardcoded
+ * legend that disagrees with the scorer is worse than no legend.
+ */
+const BANDS = [
+  { label: 'Normal', range: `0\u2013${SCORE_THRESHOLDS.unusual - 1}`, width: SCORE_THRESHOLDS.unusual, tone: 'bg-success/60' },
+  { label: 'Unusual', range: `${SCORE_THRESHOLDS.unusual}\u2013${SCORE_THRESHOLDS.elevated - 1}`, width: SCORE_THRESHOLDS.elevated - SCORE_THRESHOLDS.unusual, tone: 'bg-warning/50' },
+  { label: 'Elevated', range: `${SCORE_THRESHOLDS.elevated}\u2013${SCORE_THRESHOLDS.high - 1}`, width: SCORE_THRESHOLDS.high - SCORE_THRESHOLDS.elevated, tone: 'bg-warning' },
+  { label: 'High', range: `${SCORE_THRESHOLDS.high}\u2013100`, width: 100 - SCORE_THRESHOLDS.high + 1, tone: 'bg-danger/60' }
+] as const;
+
+/** What a confidence level means for the reader, rather than just a word. */
+const CONFIDENCE_NOTE: Record<Confidence, string> = {
+  low: 'Based on limited evidence',
+  medium: 'Based on several signals',
+  high: 'Multiple independent signals agree'
+};
+
 export function RiskScore({ anomaly, className }: RiskScoreProps) {
   const meta = levelStyles[anomaly.level];
-  const contributing = anomaly.details.filter((d) => d.level === 'high' || d.level === 'unusual');
+  const contributing = anomaly.details.filter((d) => d.level === 'high' || d.level === 'elevated' || d.level === 'unusual');
 
   return (
     <section aria-labelledby="anomaly-heading" className={cn('flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-card md:p-6', className)}>
@@ -46,18 +67,25 @@ export function RiskScore({ anomaly, className }: RiskScoreProps) {
         <div className="min-w-0">
           <p className="text-base font-semibold text-ink">{levelHeadline(anomaly.level)}</p>
           <LevelBadge level={anomaly.level} className="mt-2" size="md" />
+          <p className="mt-2 text-xs text-muted">
+            <span className="font-medium capitalize text-ink">{anomaly.confidence}</span> confidence
+            {' \u00b7 '}
+            {CONFIDENCE_NOTE[anomaly.confidence]}
+          </p>
         </div>
       </div>
 
       <div className="mt-4 flex h-1.5 overflow-hidden rounded-full" aria-hidden="true">
-        <span className="w-[40%] bg-success/60" />
-        <span className="w-[30%] bg-warning/60" />
-        <span className="w-[30%] bg-danger/60" />
+        {BANDS.map((band) => (
+          <span key={band.label} className={band.tone} style={{ width: `${band.width}%` }} />
+        ))}
       </div>
       <div className="mt-1.5 flex justify-between text-[11px] text-muted">
-        <span>Normal 0–39</span>
-        <span>Unusual 40–69</span>
-        <span>High 70–100</span>
+        {BANDS.map((band) => (
+          <span key={band.label}>
+            {band.label} {band.range}
+          </span>
+        ))}
       </div>
 
       {contributing.length > 0 ?

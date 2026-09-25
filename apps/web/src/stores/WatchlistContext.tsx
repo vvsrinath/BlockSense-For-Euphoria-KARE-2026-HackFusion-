@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { mockWatchlist } from '../mock/mockWatchlist';
 import type { WatchItem } from '@blocksense/shared';
 
 const STORAGE_KEY = 'blocksense.watchlist';
@@ -17,9 +16,9 @@ const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 function readItems(): WatchItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) as WatchItem[] : mockWatchlist;
+    return raw ? (JSON.parse(raw) as WatchItem[]) : [];
   } catch {
-    return mockWatchlist;
+    return [];
   }
 }
 

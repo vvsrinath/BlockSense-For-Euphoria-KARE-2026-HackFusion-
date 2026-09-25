@@ -73,7 +73,7 @@ export function refreshEntityKind(entity: NetworkEntity, structural: NetworkEnti
       level: entity.level,
       firstSeen: entity.firstSeen,
       txCount: entity.txCount,
-      structural: structural === 'center' || structural === 'high' || structural === 'new' ? 'wallet' : structural,
+      structural: structural === 'center' || structural === 'high' || structural === 'elevated' || structural === 'new' ? 'wallet' : structural,
       ...(now !== undefined ? { now } : {})
     })
   };

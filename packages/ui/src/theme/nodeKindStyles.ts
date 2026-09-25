@@ -4,6 +4,7 @@ import {
   FileCode2Icon,
   LandmarkIcon,
   OctagonAlertIcon,
+  ShieldAlertIcon,
   SparklesIcon,
   WalletIcon,
   type LucideIcon
@@ -30,5 +31,6 @@ export const nodeKindStyles: Record<NodeKind, NodeKindStyle> = {
   defi: { icon: LandmarkIcon, dot: 'bg-purple', soft: 'bg-purple/10 text-purple', solid: 'bg-purple text-white' },
   contract: { icon: FileCode2Icon, dot: 'bg-muted', soft: 'bg-subtle text-muted', solid: 'bg-muted text-white' },
   new: { icon: SparklesIcon, dot: 'bg-cyan', soft: 'bg-cyan/10 text-cyan', solid: 'bg-cyan text-white' },
+  elevated: { icon: ShieldAlertIcon, dot: 'bg-warning', soft: 'bg-warning/15 text-warning-ink', solid: 'bg-warning text-white' },
   high: { icon: OctagonAlertIcon, dot: 'bg-danger', soft: 'bg-danger/10 text-danger-ink', solid: 'bg-danger text-white' }
 };

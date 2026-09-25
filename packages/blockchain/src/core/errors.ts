@@ -4,25 +4,62 @@
  * Adapters are expected to throw these (never raw `fetch` failures) so that
  * `apps/api` can map them onto HTTP status codes without knowing which chain
  * the request targeted.
+ *
+ * The code strings are part of the public API contract: clients switch on them,
+ * so they must stay stable even if the message text changes.
  */
 
 export type ProviderErrorCode =
-  | 'NOT_FOUND'
-  | 'RPC_ERROR'
-  | 'RATE_LIMITED'
+  // The request itself is wrong.
+  | 'INVALID_REQUEST'
+  | 'INVALID_ADDRESS'
+  | 'INVALID_TRANSACTION_HASH'
   | 'UNSUPPORTED_CHAIN'
-  | 'INVALID_INPUT'
-  | 'UPSTREAM_UNAVAILABLE'
-  | 'NOT_IMPLEMENTED';
+  | 'NOT_FOUND'
+  // The chain provider could not answer.
+  | 'RPC_UNAVAILABLE'
+  | 'RPC_TIMEOUT'
+  | 'RPC_RATE_LIMITED'
+  | 'PROVIDER_ERROR'
+  // BlockSense could not produce a result.
+  | 'TRANSACTION_NOT_FOUND'
+  | 'WALLET_NOT_FOUND'
+  | 'ASSET_NOT_FOUND'
+  | 'ANALYSIS_FAILED'
+  | 'NETWORK_LIMIT_EXCEEDED'
+  | 'NOT_IMPLEMENTED'
+  | 'INTERNAL_ERROR';
 
 const STATUS_BY_CODE: Record<ProviderErrorCode, number> = {
-  NOT_FOUND: 404,
-  RPC_ERROR: 502,
-  RATE_LIMITED: 429,
+  INVALID_REQUEST: 400,
+  INVALID_ADDRESS: 400,
+  INVALID_TRANSACTION_HASH: 400,
   UNSUPPORTED_CHAIN: 400,
-  INVALID_INPUT: 400,
-  UPSTREAM_UNAVAILABLE: 503,
-  NOT_IMPLEMENTED: 501
+  NOT_FOUND: 404,
+
+  RPC_UNAVAILABLE: 503,
+  RPC_TIMEOUT: 504,
+  RPC_RATE_LIMITED: 429,
+  PROVIDER_ERROR: 502,
+
+  TRANSACTION_NOT_FOUND: 404,
+  WALLET_NOT_FOUND: 404,
+  ASSET_NOT_FOUND: 404,
+  ANALYSIS_FAILED: 500,
+  NETWORK_LIMIT_EXCEEDED: 400,
+  NOT_IMPLEMENTED: 501,
+  INTERNAL_ERROR: 500
+};
+
+/** Kinds of resource a lookup can fail to find, mapped to their error code. */
+type ResourceKind = 'Transaction' | 'Wallet' | 'Asset' | 'Account' | 'Block';
+
+const NOT_FOUND_CODE: Record<string, ProviderErrorCode> = {
+  Transaction: 'TRANSACTION_NOT_FOUND',
+  Wallet: 'WALLET_NOT_FOUND',
+  Account: 'WALLET_NOT_FOUND',
+  Asset: 'ASSET_NOT_FOUND',
+  Block: 'TRANSACTION_NOT_FOUND'
 };
 
 export class ProviderError extends Error {
@@ -39,12 +76,81 @@ export class ProviderError extends Error {
     this.chain = chain;
   }
 
-  static notFound(what: string, id: string, chain?: string): ProviderError {
-    return new ProviderError('NOT_FOUND', `${what} "${id}" was not found${chain ? ` on ${chain}` : ''}.`, chain);
+  /**
+   * A resource lookup came back empty. The message reads naturally for every
+   * caller while the code stays specific enough for a client to branch on.
+   */
+  static notFound(what: ResourceKind, id: string, chain?: string): ProviderError {
+    const code = NOT_FOUND_CODE[what] ?? 'NOT_FOUND';
+    return new ProviderError(code, `${what} "${id}" was not found${chain ? ` on ${chain}` : ''}.`, chain);
+  }
+
+  static transactionNotFound(hash: string, chain?: string): ProviderError {
+    return ProviderError.notFound('Transaction', hash, chain);
+  }
+
+  static walletNotFound(address: string, chain?: string): ProviderError {
+    return ProviderError.notFound('Wallet', address, chain);
+  }
+
+  static assetNotFound(identifier: string, chain?: string): ProviderError {
+    return ProviderError.notFound('Asset', identifier, chain);
+  }
+
+  static invalidAddress(address: string, chain?: string): ProviderError {
+    return new ProviderError('INVALID_ADDRESS', `"${address}" is not a valid address on ${chain ?? 'this chain'}.`, chain);
+  }
+
+  static invalidHash(hash: string, chain?: string): ProviderError {
+    return new ProviderError(
+      'INVALID_TRANSACTION_HASH',
+      `"${hash}" is not a valid transaction hash on ${chain ?? 'this chain'}.`,
+      chain
+    );
+  }
+
+  static invalidRequest(message: string, chain?: string): ProviderError {
+    return new ProviderError('INVALID_REQUEST', message, chain);
+  }
+
+  static unsupportedChain(chain: string): ProviderError {
+    return new ProviderError('UNSUPPORTED_CHAIN', `Chain "${chain}" is not supported.`, chain);
+  }
+
+  static rpcUnavailable(message: string, chain?: string): ProviderError {
+    return new ProviderError('RPC_UNAVAILABLE', message, chain);
+  }
+
+  static rpcTimeout(chain: string, timeoutMs: number): ProviderError {
+    return new ProviderError('RPC_TIMEOUT', `${chain} provider timed out after ${timeoutMs}ms.`, chain);
   }
 
   static rateLimited(chain?: string): ProviderError {
-    return new ProviderError('RATE_LIMITED', `Upstream provider rate limit exceeded${chain ? ` (${chain})` : ''}.`, chain);
+    return new ProviderError(
+      'RPC_RATE_LIMITED',
+      `Upstream provider rate limit exceeded${chain ? ` (${chain})` : ''}.`,
+      chain
+    );
+  }
+
+  static providerError(message: string, chain?: string): ProviderError {
+    return new ProviderError('PROVIDER_ERROR', message, chain);
+  }
+
+  /**
+   * The chain is supported but the operation needs a provider this deployment
+   * has not configured — an explorer API or an indexer, for example.
+   */
+  static notImplemented(message: string, chain?: string): ProviderError {
+    return new ProviderError('NOT_IMPLEMENTED', message, chain);
+  }
+
+  static analysisFailed(message: string): ProviderError {
+    return new ProviderError('ANALYSIS_FAILED', message);
+  }
+
+  static networkLimitExceeded(message: string): ProviderError {
+    return new ProviderError('NETWORK_LIMIT_EXCEEDED', message);
   }
 
   toJSON(): { error: { code: ProviderErrorCode; message: string; chain?: string } } {
@@ -56,7 +162,7 @@ export class ProviderError extends Error {
 export function toProviderError(err: unknown, chain?: string): ProviderError {
   if (err instanceof ProviderError) return err;
   const message = err instanceof Error ? err.message : String(err);
-  return new ProviderError('UPSTREAM_UNAVAILABLE', message, chain);
+  return ProviderError.rpcUnavailable(message, chain);
 }
 
 export function isProviderError(err: unknown): err is ProviderError {

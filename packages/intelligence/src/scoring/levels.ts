@@ -42,6 +42,12 @@ export const LEVEL_INFO: Record<SignalLevel, LevelInfo> = {
     severity: LEVEL_SEVERITY.unusual,
     headline: 'Some behavior differs from history'
   },
+  elevated: {
+    level: 'elevated',
+    label: LEVEL_LABELS.elevated,
+    severity: LEVEL_SEVERITY.elevated,
+    headline: 'Behavior is well outside this wallet history'
+  },
   high: {
     level: 'high',
     label: LEVEL_LABELS.high,
@@ -50,9 +56,14 @@ export const LEVEL_INFO: Record<SignalLevel, LevelInfo> = {
   }
 };
 
-/** Map a 0-100 anomaly score onto a level. */
+/**
+ * Map a 0-100 anomaly score onto a level.
+ *
+ * Bands: normal 0-29, unusual 30-59, elevated 60-79, high 80-100.
+ */
 export function scoreToLevel(score: number): AnomalyLevel {
   if (score >= SCORE_THRESHOLDS.high) return 'high';
+  if (score >= SCORE_THRESHOLDS.elevated) return 'elevated';
   if (score >= SCORE_THRESHOLDS.unusual) return 'unusual';
   return 'normal';
 }
@@ -82,4 +93,9 @@ export function maxLevel(a: SignalLevel, b: SignalLevel): SignalLevel {
 
 export function isSevere(level: SignalLevel): boolean {
   return LEVEL_SEVERITY[level] >= LEVEL_SEVERITY.high;
+}
+
+/** `elevated` and above: the range a reviewer should actually look at. */
+export function isActionable(level: SignalLevel): boolean {
+  return LEVEL_SEVERITY[level] >= LEVEL_SEVERITY.elevated;
 }

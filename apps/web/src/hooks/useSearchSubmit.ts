@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { resolveShortForm } from '../services/search';
 import { SearchQuerySchema } from '@blocksense/shared';
 import type { ChainFilter } from '@blocksense/shared';
 import { detectInput } from '@blocksense/blockchain';
@@ -13,7 +12,7 @@ export interface SearchFeedback {
 
 export function useSearchSubmit() {
   const navigate = useNavigate();
-  const [pending, setPending] = useState(false);
+  const [pending] = useState(false);
 
   const go = useCallback(
     (type: 'wallet' | 'transaction', value: string) => {
@@ -32,19 +31,14 @@ export function useSearchSubmit() {
       const detection = detectInput(value, chain);
 
       if (detection.kind === 'shortened') {
-        setPending(true);
-        try {
-          const match = await resolveShortForm(value);
-          if (match) {
-            go(match.type, match.value);
-            return null;
-          }
-        } catch {
-          return { tone: 'error', title: "We couldn't retrieve the blockchain data right now.", message: 'Try again in a moment.' };
-        } finally {
-          setPending(false);
-        }
-        return { tone: 'error', title: "Shortened values can't be looked up.", message: 'Paste the full address or transaction hash and try again.' };
+        // A truncated identifier cannot be looked up: providers index full
+        // addresses and hashes only. Guessing at a match would be worse than
+        // asking for the whole value.
+        return {
+          tone: 'error',
+          title: "Shortened values can't be looked up.",
+          message: 'Paste the full address or transaction hash and try again.'
+        };
       }
 
       if (detection.kind === 'block') {

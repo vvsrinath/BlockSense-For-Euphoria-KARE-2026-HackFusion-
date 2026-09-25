@@ -1,29 +1,38 @@
 /**
- * The analysis endpoint.
+ * Analysis handlers.
  *
- * `POST /api/analyze` is the one write-shaped route: the request body is the
- * analysis target, not a resource being created. POST is used because the body
- * can carry a hash, an optional chain and an optional focus address — more than
- * a path can express cleanly — and so a request can be replayed or logged
- * verbatim.
+ * Analysis is a pure function over chain data, so the only work here is
+ * validating the request and handing it to the service layer.
  */
 
-import { explorerUrl } from '@blocksense/blockchain';
-import * as service from '../services/index';
-import { AnalyzeRequestSchema, body } from '../validators/index';
+import type { ChainId } from '@blocksense/shared';
+import { ProviderError } from '@blocksense/blockchain';
 import type { RequestContext } from '../middleware/router';
+import * as service from '../services/index';
+import { requireChain } from './read';
 
-export async function analyze(ctx: RequestContext) {
-  const payload = body(ctx, AnalyzeRequestSchema);
-
-  // A hash often cannot identify its own chain, so fall back to shape detection
-  // rather than making every client pass one.
-  const chain = payload.chain ?? service.inferChain(payload.hash);
-  const result = await service.analyze(chain, payload.hash, payload.focusAddress);
-
-  return {
-    chain,
-    explorer: explorerUrl(chain, payload.hash, 'tx'),
-    ...result
+export async function analyze(ctx: RequestContext): Promise<unknown> {
+  const body = (ctx.body ?? {}) as {
+    chain?: string;
+    hash?: string;
+    address?: string;
+    includeNetwork?: boolean;
   };
+
+  if (!body.chain || !body.hash) {
+    throw ProviderError.invalidRequest('`chain` and `hash` are required to analyse a transaction.');
+  }
+
+  const chain = requireChain(body.chain) as ChainId;
+  const result = await service.analyze(chain, body.hash, body.address);
+
+  // The graph is a second, much heavier provider read, so it is opt-in.
+  if (!body.includeNetwork) return result;
+
+  try {
+    return { ...result, network: await service.getNetwork(chain, body.address ?? result.transaction.from) };
+  } catch {
+    // A graph failure should not discard a completed analysis.
+    return { ...result, network: null, networkError: 'The counterparty graph could not be built.' };
+  }
 }

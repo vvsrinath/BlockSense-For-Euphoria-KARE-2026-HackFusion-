@@ -8,7 +8,7 @@ import { QuickAnalyze } from '../components/home/QuickAnalyze';
 import { PageContainer } from '../components/layout/PageContainer';
 import { TransactionTable } from '../components/tables/TransactionTable';
 import { useWatchlist } from '../stores/WatchlistContext';
-import { DEMO_TX_HASH } from '../mock/mockAddresses';
+import { FEATURED_EXAMPLE_TX } from '../data/examples';
 import { useAsync } from '../hooks/useAsync';
 import { truncateMiddle } from '@blocksense/shared';
 import { rowFromTransaction } from '../utils/rows';
@@ -54,7 +54,7 @@ export function Home() {
               <li>First interaction with receiver</li>
               <li>Connected to a high-anomaly wallet</li>
             </ul>
-            <Button to={`/analyze/tx/${DEMO_TX_HASH}`} className="mt-5 w-full" iconRight={ArrowRightIcon}>
+            <Button to={`/analyze/tx/${FEATURED_EXAMPLE_TX.hash}`} className="mt-5 w-full" iconRight={ArrowRightIcon}>
               Open analysis
             </Button>
           </section>

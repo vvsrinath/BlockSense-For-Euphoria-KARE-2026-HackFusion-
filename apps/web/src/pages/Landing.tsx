@@ -5,9 +5,9 @@ import { BrandLogo, Button } from '@blocksense/ui';
 import { NetworkIllustration } from '../components/landing/NetworkIllustration';
 import { chains } from '@blocksense/blockchain';
 import { features, journeySteps } from '../data/features';
-import { DEMO_TX_HASH } from '../mock/mockAddresses';
+import { FEATURED_EXAMPLE_TX } from '../data/examples';
 
-const DEMO_PATH = `/analyze/tx/${DEMO_TX_HASH}`;
+const DEMO_PATH = `/analyze/tx/${FEATURED_EXAMPLE_TX.hash}`;
 
 export function Landing() {
   return (

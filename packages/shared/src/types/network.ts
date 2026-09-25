@@ -1,6 +1,6 @@
 import type { AnomalyLevel, ChainId } from './chain';
 
-export type NodeKind = 'center' | 'wallet' | 'exchange' | 'defi' | 'contract' | 'new' | 'high';
+export type NodeKind = 'center' | 'wallet' | 'exchange' | 'defi' | 'contract' | 'new' | 'elevated' | 'high';
 
 export interface NetworkEntity {
   id: string;

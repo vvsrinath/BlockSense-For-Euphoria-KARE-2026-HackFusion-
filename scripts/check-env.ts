@@ -1,9 +1,13 @@
 /**
  * Environment check.
  *
- * Run with `pnpm check:env`. Reports which chains can reach live data and which
- * will fall back to the mock transport, so a contributor never has to guess why
+ * Run with `pnpm check:env`. Reports which chains will reach a real provider and
+ * which are relying on a public endpoint, so a contributor never has to guess why
  * a value did not update.
+ *
+ * Every chain reads live data. There is no mock transport to fall back to, so
+ * this is a report rather than a gate: a missing key is a missing rate limit,
+ * not a missing feature.
  *
  * No secrets are printed — only whether a variable is present.
  */
@@ -31,38 +35,48 @@ process.stdout.write(`\n${BOLD}BlockSense environment${RESET}\n\n`);
 process.stdout.write(`${BOLD}Runtime${RESET}\n`);
 line('Node', process.version);
 line('Environment', config.env);
-line('Mock latency', `${config.mockLatency}ms`);
-line('Use live data', config.useLiveData ? `${GREEN}yes${RESET}` : `${YELLOW}no (mock)${RESET}`);
+line('Data source', `${GREEN}live${RESET}`);
+line('Request timeout', `${config.requestTimeoutMs}ms`);
+line('Cache TTL', `${config.cacheTtlSeconds}s`);
 process.stdout.write('\n');
 
-process.stdout.write(`${BOLD}Chain credentials${RESET}\n${DIM}  Adapters fall back to mock data when a URL is missing.${RESET}\n\n`);
+process.stdout.write(
+  `${BOLD}Chain providers${RESET}\n${DIM}  A public endpoint works without a key; a key raises the rate limit.${RESET}\n\n`
+);
 
-let live = 0;
+let keyed = 0;
+let defaulted = 0;
+
 for (const chain of supportedChains()) {
   const keys = ENV_KEYS[chain];
   const hasRpc = present(keys.rpcUrl);
   const hasKey = keys.apiKey ? present(keys.apiKey) : true;
 
-  if (hasRpc && config.useLiveData) {
-    live += 1;
-  }
+  if (hasRpc) keyed += 1;
+  else defaulted += 1;
 
-  const rpcLabel = hasRpc ? `${GREEN}set${RESET}` : `${YELLOW}missing${RESET}`;
-  const keyLabel = keys.apiKey ? ` / ${keys.apiKey}: ${hasKey ? `${GREEN}set${RESET}` : `${YELLOW}missing${RESET}`}` : '';
-  process.stdout.write(`  ${chain.padEnd(10)} ${rpcLabel}${keyLabel}\n`);
+  const source = hasRpc ? `${GREEN}configured${RESET}` : `${YELLOW}public default${RESET}`;
+  const keyLabel = keys.apiKey ? `   ${keys.apiKey}: ${hasKey ? `${GREEN}set${RESET}` : `${YELLOW}missing${RESET}`}` : '';
+  process.stdout.write(`  ${chain.padEnd(10)} ${source}${keyLabel}\n`);
 }
 
 process.stdout.write('\n');
 
-if (!config.useLiveData) {
+const total = supportedChains().length;
+if (keyed === 0) {
   process.stdout.write(
-    `${YELLOW}USE_LIVE_DATA is false.${RESET} Every chain is serving mock data.\n` +
-      'Set USE_LIVE_DATA=true in your environment once you have added at least one RPC URL.\n\n'
+    `${YELLOW}No provider URLs are configured.${RESET} Every chain is using its public endpoint,\n` +
+      'which is rate limited and can refuse requests. Add at least one URL for reliable runs.\n\n'
   );
-} else if (live === 0) {
+} else if (defaulted > 0) {
   process.stdout.write(
-    `${YELLOW}USE_LIVE_DATA is true but no RPC URL is set.${RESET} Every chain is serving mock data.\n\n`
+    `${YELLOW}${defaulted} of ${total} chains are using a public endpoint.${RESET} ` +
+      'Those are rate limited and can refuse requests under load.\n\n'
   );
 } else {
-  process.stdout.write(`${GREEN}${live} of ${supportedChains().length} chains are live.${RESET}\n\n`);
+  process.stdout.write(`${GREEN}All ${total} chains have a configured provider URL.${RESET}\n\n`);
+}
+
+if (config.maxGraphNodes < 10) {
+  process.stdout.write(`${YELLOW}MAX_GRAPH_NODES is very low (${config.maxGraphNodes}).${RESET} Graphs will be near-empty.\n\n`);
 }

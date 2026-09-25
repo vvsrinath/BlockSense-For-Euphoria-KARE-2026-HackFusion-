@@ -3,12 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { BellIcon } from 'lucide-react';
 import { DropdownPanel, IconButton } from '@blocksense/ui';
 
-import { mockNotifications } from '../../mock/mockWatchlist';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { levelStyles } from '@blocksense/ui';
-import { cn } from '@blocksense/shared';
+import { cn, type AppNotification } from '@blocksense/shared';
 
-export function NotificationsMenu() {
+/**
+ * Notifications are driven by the user's watchlist, not by sample content.
+ *
+ * There is no alert backend yet, so this renders an honest empty state rather
+ * than fabricated alerts. A seeded list here would look like real findings
+ * about real wallets, which is the one thing this panel must never do.
+ */
+export interface NotificationsMenuProps {
+  /** Supplied by the watchlist layer once alerting exists. */
+  notifications?: AppNotification[];
+}
+
+export function NotificationsMenu({ notifications = [] }: NotificationsMenuProps) {
   const [open, setOpen] = useState(false);
   const [readIds, setReadIds] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
@@ -16,7 +27,7 @@ export function NotificationsMenu() {
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close, open);
 
-  const unread = mockNotifications.filter((n) => !readIds.includes(n.id)).length;
+  const unread = notifications.filter((n) => !readIds.includes(n.id)).length;
 
   return (
     <div ref={ref} className="relative">
@@ -25,12 +36,19 @@ export function NotificationsMenu() {
       <DropdownPanel open={open} className="w-[min(88vw,360px)]" label="Notifications">
         <div className="flex items-center justify-between px-3 py-2">
           <p className="text-sm font-semibold text-ink">Notifications</p>
-          <button type="button" onClick={() => setReadIds(mockNotifications.map((n) => n.id))} className="text-xs font-medium text-primary hover:underline disabled:text-muted" disabled={!unread}>
-            Mark all as read
-          </button>
+          {unread > 0 && (
+            <button type="button" onClick={() => setReadIds(notifications.map((n) => n.id))} className="text-xs font-medium text-primary hover:underline">
+              Mark all as read
+            </button>
+          )}
         </div>
+        {notifications.length === 0 ?
+        <p className="px-3 pb-4 pt-1 text-sm leading-relaxed text-muted">
+          No notifications yet. Add a wallet to your watchlist and alerts about changes in its
+          behaviour will appear here.
+        </p> :
         <ul>
-          {mockNotifications.map((n) => {
+          {notifications.map((n) => {
             const meta = levelStyles[n.level];
             const Icon = meta.icon;
             const read = readIds.includes(n.id);
@@ -44,7 +62,7 @@ export function NotificationsMenu() {
                     navigate(n.to);
                   }}
                   className="flex w-full gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-subtle">
-                  
+
                   <span className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', meta.badge)}>
                     <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   </span>
@@ -58,6 +76,7 @@ export function NotificationsMenu() {
 
           })}
         </ul>
+        }
       </DropdownPanel>
     </div>);
 

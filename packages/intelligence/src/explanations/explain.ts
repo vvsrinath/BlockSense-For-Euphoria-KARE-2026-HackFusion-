@@ -6,7 +6,7 @@
  * unexplained numbers.
  */
 
-import type { AnomalySignal, SignalLevel } from '@blocksense/shared';
+import { ANOMALY_LEVELS, type AnomalySignal, type SignalLevel } from '@blocksense/shared';
 import { LEVEL_INFO, levelLabel, maxLevel } from '../scoring/levels';
 
 export interface Finding {
@@ -38,8 +38,10 @@ export function toFindings(signals: AnomalySignal[]): Finding[] {
 
 /** Group signals by level and summarise each group. */
 export function summarizeByLevel(signals: AnomalySignal[]): { level: SignalLevel; count: number; headline: string }[] {
-  const levels: SignalLevel[] = ['high', 'unusual', 'info', 'normal'];
-  return levels
+  // Ordered most to least severe, and derived from the canonical list so a new
+  // level cannot be added without appearing in the summary.
+  const levels: SignalLevel[] = [...ANOMALY_LEVELS].reverse();
+  levels.push('info');  return levels
     .map((level) => {
       const group = signals.filter((s) => s.level === level);
       return {
@@ -54,29 +56,43 @@ export function summarizeByLevel(signals: AnomalySignal[]): { level: SignalLevel
     .filter((entry) => entry.count > 0 || entry.level === 'high');
 }
 
-/** The single most important thing to say about a set of signals. */
-export function headlineFor(signals: AnomalySignal[]): string {
-  if (signals.length === 0) return 'No anomalies detected.';
+/**
+ * The single most important thing to say about a set of signals.
+ *
+ * Almost every signal compares a transaction against the wallet's own history,
+ * so with no baseline "no anomalies" means "nothing was checked" rather than
+ * "nothing found". The two are reported differently.
+ */
+export function headlineFor(signals: AnomalySignal[], options: { hasBaseline?: boolean } = {}): string {
+  if (signals.length === 0) {
+    return options.hasBaseline === false
+      ? 'Not enough history yet to compare this wallet against itself.'
+      : 'No anomalies detected.';
+  }
   const worst = signals.reduce<SignalLevel>((acc, s) => maxLevel(acc, s.level), 'normal');
   const count = signals.filter((s) => s.level === worst).length;
   return `${count} ${levelLabel(worst).toLowerCase()} signal${count === 1 ? '' : 's'} detected.`;
 }
 
 /** Render a report-ready markdown summary. */
-export function toMarkdown(score: number, signals: AnomalySignal[]): string {
+export function toMarkdown(score: number, signals: AnomalySignal[], hasBaseline = true): string {
   const findings = toFindings(signals);
   const lines = [
     `# Transaction analysis`,
     ``,
     `**Anomaly score:** ${score}/100`,
-    `**Assessment:** ${headlineFor(signals)}`,
+    `**Assessment:** ${headlineFor(signals, { hasBaseline })}`,
     ``,
     `## Findings`,
     ``
   ];
 
   if (findings.length === 0) {
-    lines.push(`No anomalies were detected for this transaction.`);
+    lines.push(
+      hasBaseline === false
+        ? `This wallet has too little recorded history for a meaningful comparison, so no anomalies could be ruled in or out.`
+        : `No anomalies were detected for this transaction.`
+    );
   } else {
     findings.forEach((f) => {
       lines.push(`### ${f.title} _(${levelLabel(f.level)})_`);

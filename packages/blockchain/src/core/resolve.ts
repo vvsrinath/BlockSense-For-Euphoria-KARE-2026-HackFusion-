@@ -39,7 +39,7 @@ const FACTORIES = {
 /** Build the adapter for a chain, wiring up configuration from the environment. */
 export function createAdapter(chain: ChainId, overrides: AdapterConfig = {}): BlockchainAdapter {
   const factory = FACTORIES[chain];
-  if (!factory) throw new ProviderError('UNSUPPORTED_CHAIN', `No adapter registered for chain "${chain}".`, chain);
+  if (!factory) throw ProviderError.unsupportedChain(chain);
   const keys = ENV_KEYS[chain];
   return factory({
     rpcUrl: env(keys.rpcUrl),

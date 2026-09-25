@@ -7,13 +7,13 @@ import { PageContainer } from '../components/layout/PageContainer';
 import { PageHeader } from '../components/layout/PageHeader';
 import { NetworkGraph } from '../components/network/NetworkGraph';
 import { NetworkLegend } from '../components/network/NetworkLegend';
-import { DEMO_WALLET } from '../mock/mockAddresses';
+import { DEFAULT_GRAPH_EXAMPLE } from '../data/examples';
 import { useAsync } from '../hooks/useAsync';
 
 export function NetworkGraphPage() {
   const [params] = useSearchParams();
   const requested = params.get('address');
-  const address = requested ?? DEMO_WALLET;
+  const address = requested ?? DEFAULT_GRAPH_EXAMPLE.address;
   const { data, status, error, retry } = useAsync(() => getNetwork(address), `network:${address}`);
 
   return (

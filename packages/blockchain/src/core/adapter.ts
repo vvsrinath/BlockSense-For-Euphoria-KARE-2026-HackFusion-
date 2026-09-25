@@ -12,6 +12,7 @@ import type {
   Transaction,
   Wallet
 } from '@blocksense/shared';
+import type { RequestPolicy } from './client';
 
 /** Query options accepted by history endpoints. */
 export interface HistoryOptions {
@@ -78,6 +79,8 @@ export interface AdapterConfig {
   apiKey?: string;
   /** Latency injected into the mock transport. */
   latency?: number;
+  /** Overrides for outbound request timeout and retry behaviour. */
+  policy?: Partial<RequestPolicy>;
 }
 
 /** Options that every adapter understands because it builds them from config. */

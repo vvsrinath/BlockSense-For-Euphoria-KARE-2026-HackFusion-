@@ -1,4 +1,4 @@
-import { CircleCheckIcon, InfoIcon, OctagonAlertIcon, TriangleAlertIcon, type LucideIcon } from 'lucide-react';
+import { CircleCheckIcon, InfoIcon, OctagonAlertIcon, ShieldAlertIcon, TriangleAlertIcon, type LucideIcon } from 'lucide-react';
 import type { SignalLevel } from '@blocksense/shared';
 
 /**
@@ -28,6 +28,15 @@ export const levelStyles: Record<SignalLevel, LevelStyle> = {
     icon: TriangleAlertIcon,
     badge: 'bg-warning/15 text-warning-ink',
     text: 'text-warning-ink',
+    stroke: 'stroke-warning',
+    fill: 'bg-warning'
+  },
+  elevated: {
+    icon: ShieldAlertIcon,
+    badge: 'bg-warning/15 text-warning-ink',
+    text: 'text-warning-ink',
+    // A distinct stroke from `unusual` so the two are not read as the same
+    // warning just at a different intensity.
     stroke: 'stroke-warning',
     fill: 'bg-warning'
   },
