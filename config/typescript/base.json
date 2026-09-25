@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "BlockSense Base",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+
+    "jsx": "react-jsx",
+
+    // Resolved from this file's directory, so '../..' is the repository root.
+    // The paths below are therefore written relative to the root.
+    "baseUrl": "../..",
+    "paths": {
+      "@blocksense/shared": ["packages/shared/src/index.ts"],
+      "@blocksense/shared/*": ["packages/shared/src/*"],
+      "@blocksense/blockchain": ["packages/blockchain/src/index.ts"],
+      "@blocksense/blockchain/*": ["packages/blockchain/src/*"],
+      "@blocksense/transaction-engine": ["packages/transaction-engine/src/index.ts"],
+      "@blocksense/transaction-engine/*": ["packages/transaction-engine/src/*"],
+      "@blocksense/intelligence": ["packages/intelligence/src/index.ts"],
+      "@blocksense/intelligence/*": ["packages/intelligence/src/*"],
+      "@blocksense/ui": ["packages/ui/src/index.ts"],
+      "@blocksense/ui/*": ["packages/ui/src/*"]
+    }
+  }
+}

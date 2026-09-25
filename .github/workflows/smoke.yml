@@ -1,0 +1,67 @@
+name: Smoke test
+
+# Proves the API actually starts and answers, not just that it type-checks.
+# This is the failure mode CI would otherwise miss: a server that compiles and
+# then cannot bind or route a request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-smoke:
+    name: API starts and serves
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start the API
+        run: |
+          pnpm --filter @blocksense/api start &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8787/api/health > /dev/null; then
+              echo "API is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become healthy in 30s"
+          exit 1
+
+      - name: Analyse a transaction
+        run: |
+          curl -sf -X POST http://localhost:8787/api/analyze \
+            -H 'content-type: application/json' \
+            -d '{"hash":"0x4a5e1b4b0c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b","chain":"ethereum"}' \
+            | tee /dev/stderr \
+            | grep -q '"score"'
+
+      - name: Reject a malformed body
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            http://localhost:8787/api/analyze \
+            -H 'content-type: application/json' \
+            -d '{"hash":"short"}')
+          test "$status" = "422" || { echo "expected 422, got $status"; exit 1; }
+
+      - name: Stop the API
+        if: always()
+        run: pkill -f "tsx src/index.ts" || true

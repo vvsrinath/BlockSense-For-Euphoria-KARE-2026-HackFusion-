@@ -1,0 +1,5 @@
+import { cn } from '@blocksense/shared';
+
+export function Skeleton({ className }: {className?: string;}) {
+  return <div className={cn('animate-pulse rounded-lg bg-subtle', className)} aria-hidden="true" />;
+}

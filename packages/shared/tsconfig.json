@@ -1,0 +1,11 @@
+{
+  "extends": "../../config/typescript/node-package.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@blocksense/shared": ["./src/index.ts"],
+      "@blocksense/shared/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

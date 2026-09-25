@@ -1,0 +1,29 @@
+{
+  "name": "@blocksense/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The BlockSense web interface.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@blocksense/blockchain": "workspace:*",
+    "@blocksense/intelligence": "workspace:*",
+    "@blocksense/shared": "workspace:*",
+    "@blocksense/transaction-engine": "workspace:*",
+    "@blocksense/ui": "workspace:*",
+    "@xyflow/react": "^12.3.0",
+    "framer-motion": "^11.5.4",
+    "lucide-react": "^0.522.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.12.7",
+    "sonner": "^2.0.1",
+    "zod": "^3.23.8"
+  }
+}

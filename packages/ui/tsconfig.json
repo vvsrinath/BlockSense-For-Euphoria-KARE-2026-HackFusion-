@@ -1,0 +1,15 @@
+{
+  "extends": "../../config/typescript/react-app.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@blocksense/shared": ["../shared/src/index.ts"],
+      "@blocksense/shared/*": ["../shared/src/*"],
+      "@blocksense/blockchain": ["../blockchain/src/index.ts"],
+      "@blocksense/blockchain/*": ["../blockchain/src/*"],
+      "@blocksense/intelligence": ["../intelligence/src/index.ts"],
+      "@blocksense/intelligence/*": ["../intelligence/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

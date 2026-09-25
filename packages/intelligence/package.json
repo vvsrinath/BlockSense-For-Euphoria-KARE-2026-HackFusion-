@@ -1,0 +1,19 @@
+{
+  "name": "@blocksense/intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Anomaly detection, behavioural DNA, relationship inference and scoring for BlockSense.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@blocksense/shared": "workspace:*"
+  }
+}

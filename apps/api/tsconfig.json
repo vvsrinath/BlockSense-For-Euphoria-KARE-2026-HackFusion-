@@ -1,0 +1,18 @@
+{
+  "extends": "../../config/typescript/node-package.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@blocksense/shared": ["../../packages/shared/src/index.ts"],
+      "@blocksense/shared/*": ["../../packages/shared/src/*"],
+      "@blocksense/blockchain": ["../../packages/blockchain/src/index.ts"],
+      "@blocksense/blockchain/*": ["../../packages/blockchain/src/*"],
+      "@blocksense/transaction-engine": ["../../packages/transaction-engine/src/index.ts"],
+      "@blocksense/transaction-engine/*": ["../../packages/transaction-engine/src/*"],
+      "@blocksense/intelligence": ["../../packages/intelligence/src/index.ts"],
+      "@blocksense/intelligence/*": ["../../packages/intelligence/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

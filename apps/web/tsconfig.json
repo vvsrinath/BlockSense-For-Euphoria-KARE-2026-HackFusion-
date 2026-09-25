@@ -1,0 +1,19 @@
+{
+  "extends": "../../config/typescript/react-app.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@blocksense/shared": ["../../packages/shared/src/index.ts"],
+      "@blocksense/shared/*": ["../../packages/shared/src/*"],
+      "@blocksense/blockchain": ["../../packages/blockchain/src/index.ts"],
+      "@blocksense/blockchain/*": ["../../packages/blockchain/src/*"],
+      "@blocksense/transaction-engine": ["../../packages/transaction-engine/src/index.ts"],
+      "@blocksense/transaction-engine/*": ["../../packages/transaction-engine/src/*"],
+      "@blocksense/intelligence": ["../../packages/intelligence/src/index.ts"],
+      "@blocksense/intelligence/*": ["../../packages/intelligence/src/*"],
+      "@blocksense/ui": ["../../packages/ui/src/index.ts"],
+      "@blocksense/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}
