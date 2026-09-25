@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom';
 import { ArrowRightIcon, PlayIcon } from 'lucide-react';
-import { BrandLogo, Button } from '@blocksense/ui';
+import { Button } from '@blocksense/ui';
 
 import { NetworkIllustration } from '../components/landing/NetworkIllustration';
 import { chains } from '@blocksense/blockchain';
@@ -11,26 +10,7 @@ const DEMO_PATH = `/analyze/tx/${FEATURED_EXAMPLE_TX.hash}`;
 
 export function Landing() {
   return (
-    <div className="min-h-screen w-full bg-bg text-ink">
-      <header className="mx-auto flex h-16 max-w-content items-center justify-between px-4 md:px-8">
-        <Link to="/" aria-label="BlockSense home">
-          <BrandLogo size={28} />
-        </Link>
-        <nav aria-label="Landing" className="hidden items-center gap-8 text-sm text-muted md:flex">
-          <a href="#features" className="hover:text-ink">
-            Features
-          </a>
-          <a href="#how-it-works" className="hover:text-ink">
-            How it works
-          </a>
-          <Link to={DEMO_PATH} className="hover:text-ink">
-            Demo
-          </Link>
-        </nav>
-        <Button to="/home" variant="secondary" size="sm">
-          Open app
-        </Button>
-      </header>
+    <div className="w-full bg-bg text-ink">
 
       <main>
         <section className="mx-auto grid max-w-content items-center gap-12 px-4 pb-16 pt-10 md:px-8 md:pt-16 lg:grid-cols-[1.05fr_1fr] lg:pb-24">
@@ -115,23 +95,6 @@ export function Landing() {
         </section>
       </main>
 
-      <footer className="border-t border-line bg-surface">
-        <div className="mx-auto flex max-w-content flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-8">
-          <BrandLogo size={26} showTagline />
-          <div className="flex flex-wrap gap-6 text-sm text-muted">
-            <Link to="/home" className="hover:text-ink">
-              App
-            </Link>
-            <Link to="/help" className="hover:text-ink">
-              Help
-            </Link>
-            <Link to="/settings" className="hover:text-ink">
-              Settings
-            </Link>
-          </div>
-          <p className="text-xs text-muted">Demo build · all data shown is sample data</p>
-        </div>
-      </footer>
     </div>);
 
 }

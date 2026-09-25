@@ -1,10 +1,12 @@
 import {
+  BellRingIcon,
   CoinsIcon,
   FileTextIcon,
   HouseIcon,
   NetworkIcon,
   ScanSearchIcon,
   StarIcon,
+  TerminalIcon,
   WalletIcon,
   type LucideIcon } from
 'lucide-react';
@@ -23,4 +25,8 @@ export const primaryNav: NavItem[] = [
 { to: '/network', label: 'Network Graph', shortLabel: 'Network', icon: NetworkIcon },
 { to: '/assets', label: 'Assets & Tokens', shortLabel: 'Assets', icon: CoinsIcon },
 { to: '/watchlist', label: 'Watchlist', shortLabel: 'Watchlist', icon: StarIcon },
-{ to: '/reports', label: 'Reports', shortLabel: 'Reports', icon: FileTextIcon }];
+{ to: '/reports', label: 'Reports', shortLabel: 'Reports', icon: FileTextIcon },
+{ to: '/alerts', label: 'Alerts', shortLabel: 'Alerts', icon: BellRingIcon },
+// `/console`, not `/api`: netlify.toml rewrites /api/* to the function, so an
+// app route there would collide with the API the console exists to describe.
+{ to: '/console', label: 'API', shortLabel: 'API', icon: TerminalIcon }];

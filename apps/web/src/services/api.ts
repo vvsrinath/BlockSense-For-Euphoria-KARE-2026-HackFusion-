@@ -168,6 +168,16 @@ export const api = {
 
   chains: () => get<(Record<string, unknown> & { id: ChainId; name: string; symbol: string; live: boolean })[]>('/chains'),
 
+  /** The API's own route table and limits, used by the API reference page. */
+  index: () =>
+    get<{
+      name: string;
+      version: string;
+      dataSource: string;
+      limits: { cacheTtlSeconds: number; maxGraphNodes: number; maxGraphEdges: number; requestTimeoutMs: number };
+      routes: { method: string; path: string }[];
+    }>('/'),
+
   transaction: (chain: ChainId, hash: string) => get<Transaction>(chainPath(`/transactions/{chain}/${hash}`, chain)),
 
   wallet: (chain: ChainId, address: string) => get<Wallet>(chainPath(`/wallets/{chain}/${address}`, chain)),

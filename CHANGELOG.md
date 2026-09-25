@@ -9,6 +9,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 Nothing yet.
 
+## [0.5.0] — 2026-09-26
+
+### Added
+- Public site: features, how it works, supported chains, use cases, pricing, about, scope, roadmap, security, contact, and changelog pages.
+- A Scope page stating what BlockSense cannot do. A tool that scores addresses is one sentence away from being read as an accusation engine, so the boundary is part of the product.
+- Pricing tiers with no prices beyond the free one. The commercial model is undecided, and a published number is a commitment.
+- A Status page that polls the same health endpoints the product uses, and reports "API unreachable" rather than optimistic green rows.
+- Documentation: developer hub, API reference generated from the running route table, SDK guide, architecture, and a contributing guide.
+- An in-app API console at `/console` that sends real requests and lists the live route table.
+- An Alerts page describing the planned feature. No toggle is offered, because a setting that silently does nothing is worse than an honest page.
+- Public site, documentation, and status pages in the repository changelog as well as in the app.
+
+### Changed
+- Public, documentation, and application pages now use three distinct layouts. Marketing pages have no sidebar and no workspace chrome; docs get a section sidebar.
+- The landing page no longer renders its own header and footer. The public shell supplies both, so the whole site is reachable from every page.
+- Removed the landing footer claim that all data shown is sample data. It stopped being true when the mock dataset was deleted, and it contradicted the product.
+
+### Fixed
+- Renamed the in-app API route from `/api` to `/console`. The Netlify redirect rewrites `/api/*` to the function, so an application route there would have collided with the API it describes.
+
 ## [0.1.0] — 2026-09-25
 
 The first working release. Built for Euphoria · KARE HackFusion 2026.
