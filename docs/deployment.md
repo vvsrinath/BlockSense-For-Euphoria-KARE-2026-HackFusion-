@@ -22,13 +22,28 @@ matters if you host the frontend somewhere else.
 
 ## 1. Connect the repository
 
-Point Netlify at this repository. With `netlify.toml` at the repository root,
-the build, publish directory, function, and redirects are all picked up
-automatically — no settings to enter by hand.
+Point Netlify at this repository. The build, publish directory, function, and
+redirects are picked up automatically — no settings to enter by hand.
 
+- **Base directory: `/`** (the repository root). This is the recommended setting
+  and the one the root `netlify.toml` is written for.
 - Build command: `pnpm install --frozen-lockfile && pnpm build`
 - Publish directory: `apps/web/dist`
 - Node: 20
+
+### If your site already has its base directory set to `apps/web`
+
+Netlify only reads `netlify.toml` from the base directory, so a site pointed at
+`apps/web` ignores the root file completely and falls back to whatever is in the
+dashboard. That usually means no build command and no function, which looks like
+a build that randomly fails.
+
+There is a configuration for that case at `apps/web/netlify.toml`, written
+relative to its own directory, so a site with that base directory deploys
+correctly as-is. `tests/netlifyConfig.test.ts` asserts the two files declare the
+same redirects in the same order, so they cannot drift.
+
+Either way, setting the base directory back to `/` is the cleaner fix.
 
 The build command covers the API as well as the web app, because the function
 imports the already-built bundle. Building only the frontend would leave

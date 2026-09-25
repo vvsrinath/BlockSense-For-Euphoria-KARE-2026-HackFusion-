@@ -1,43 +1,44 @@
 import { cn } from '@blocksense/shared';
 
 /**
- * The BlockSense brand mark.
+ * The BlockSense brand.
  *
- * The artwork is a raster file, not an inline SVG, so it comes from
- * `/public` and is referenced by URL. It is served as a square canvas at every
- * size: the lockup is wider than it is tall, and stretching it to a square
- * would distort the letterforms.
+ * The supplied artwork is a *vertical* lockup: an emblem above a row of ten
+ * letterforms. Two consequences, both of which used to be wrong here.
+ *
+ * The raster wordmark is illegible at interface sizes — scaled into a 28px
+ * header, each of the ten letters is under three pixels wide. So the header
+ * uses the emblem on its own (`logo-mark.png`, cut from the lockup by
+ * `pnpm brand:assets`) and renders the name as real text beside it, which stays
+ * selectable, themeable, and crisp at any size.
+ *
+ * The full lockup is still the right thing for a social card, where it is drawn
+ * 380px wide and the wordmark is genuinely legible.
  */
 
 interface BrandLogoProps {
   variant?: 'full' | 'mark';
-  /** Height of the mark in pixels. The width follows the artwork's aspect. */
+  /** Height of the emblem in pixels. */
   size?: number;
   showTagline?: boolean;
-  /**
-   * Set false if the artwork already contains the wordmark, so it is not
-   * rendered twice.
-   */
-  showWordmark?: boolean;
   className?: string;
 }
 
-/** Intrinsic aspect of logo.png, kept in sync by scripts/build-brand-assets. */
-const ARTWORK_ASPECT = 419 / 327;
+/**
+ * Intrinsic aspect of the cut-out emblem, 215×263.
+ *
+ * Written as a literal rather than a comment so a change to the artwork shows up
+ * as a distorted logo in review instead of a silently wrong ratio.
+ */
+const MARK_ASPECT = 215 / 263;
 
-export function BrandLogo({
-  variant = 'full',
-  size = 28,
-  showTagline = false,
-  showWordmark = true,
-  className
-}: BrandLogoProps) {
+export function BrandLogo({ variant = 'full', size = 28, showTagline = false, className }: BrandLogoProps) {
   const height = size;
-  const width = Math.round(size * ARTWORK_ASPECT);
+  const width = Math.round(size * MARK_ASPECT);
 
   const mark = (
     <img
-      src="/logo.png"
+      src="/logo-mark.png"
       alt=""
       aria-hidden="true"
       width={width}
@@ -55,22 +56,16 @@ export function BrandLogo({
     );
   }
 
-  // With the artwork being a wide lockup, the text beside it is only correct
-  // when the artwork is a mark on its own. `showWordmark` is the escape hatch.
-  const withText = showWordmark ? (
-    <span className="flex flex-col leading-none">
-      <span className="font-semibold tracking-tight" style={{ fontSize: Math.round(size * 0.64) }}>
-        <span className="text-brand-ink">Block</span>
-        <span className="text-primary">Sense</span>
-      </span>
-      {showTagline && <span className="mt-1.5 text-xs text-muted">See the transaction. Understand the behavior.</span>}
-    </span>
-  ) : null;
-
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       {mark}
-      {withText}
+      <span className="flex flex-col leading-none">
+        <span className="font-semibold tracking-tight" style={{ fontSize: Math.round(size * 0.64) }}>
+          <span className="text-brand-ink">Block</span>
+          <span className="text-primary">Sense</span>
+        </span>
+        {showTagline && <span className="mt-1.5 text-xs text-muted">See the transaction. Understand the behavior.</span>}
+      </span>
     </span>
   );
 }

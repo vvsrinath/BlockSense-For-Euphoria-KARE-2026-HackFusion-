@@ -72,6 +72,65 @@ def fit(image: Image.Image, width: int) -> Image.Image:
     return image.resize((width, height), Image.LANCZOS)
 
 
+def emblem(logo: Image.Image) -> Image.Image:
+    """Cut the emblem out of a lockup, discarding the letterforms.
+
+    The emblem is the largest connected blob: in a lockup the mark dwarfs the
+    individual letters, so size is a reliable way to tell them apart without
+    needing to know what the wordmark says.
+    """
+    alpha = logo.getchannel("A").point(lambda v: 255 if v > 60 else 0)
+    labels, boxes = _components(alpha)
+    if not boxes:
+        return logo
+
+    biggest = max(range(len(boxes)), key=lambda i: boxes[i][4])
+    x0, y0, x1, y1 = boxes[biggest][:4]
+    # A little breathing room, since the mark should not sit flush against
+    # whatever it is next to.
+    pad = max(x1 - x0, y1 - y0) // 14
+    box = (
+        max(0, x0 - pad),
+        max(0, y0 - pad),
+        min(logo.width, x1 + 1 + pad),
+        min(logo.height, y1 + 1 + pad),
+    )
+    return logo.crop(box)
+
+
+def _components(mask: Image.Image):
+    """Label 8-connected regions, returning (count, boxes) with pixel areas."""
+    import numpy as np
+    from collections import deque
+
+    grid = np.array(mask) > 0
+    height, width = grid.shape
+    seen = np.zeros_like(grid, dtype=bool)
+    boxes = []
+    for y in range(height):
+        for x in range(width):
+            if not grid[y, x] or seen[y, x]:
+                continue
+            queue = deque([(y, x)])
+            seen[y, x] = True
+            area = 0
+            min_y = max_y = y
+            min_x = max_x = x
+            while queue:
+                cy, cx = queue.popleft()
+                area += 1
+                min_y, max_y = min(min_y, cy), max(max_y, cy)
+                min_x, max_x = min(min_x, cx), max(max_x, cx)
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        ny, nx = cy + dy, cx + dx
+                        if 0 <= ny < height and 0 <= nx < width and grid[ny, nx] and not seen[ny, nx]:
+                            seen[ny, nx] = True
+                            queue.append((ny, nx))
+            boxes.append((min_x, min_y, max_x, max_y, area))
+    return len(boxes), boxes
+
+
 def square(image: Image.Image, size: int) -> Image.Image:
     """Centre the artwork on a transparent square canvas of ``size``."""
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -80,7 +139,7 @@ def square(image: Image.Image, size: int) -> Image.Image:
     return canvas
 
 
-def social_card(logo: Image.Image) -> Image.Image:
+def social_card(mark: Image.Image) -> Image.Image:
     width, height = OG_SIZE
     card = Image.new("RGBA", OG_SIZE, OG_BG + (255,))
 
@@ -98,7 +157,12 @@ def social_card(logo: Image.Image) -> Image.Image:
     card = Image.alpha_composite(card, wash)
 
     logo_width = 380
-    card.alpha_composite(fit(logo, logo_width), ((width - logo_width) // 2, 92))
+    # The emblem, not the lockup. The card already spells the name out in text,
+    # and the lockup contains it too, so using the full artwork showed the name
+    # twice.
+    emblem_height = 150
+    mark_img = fit(mark, round(emblem_height * mark.width / mark.height))
+    card.alpha_composite(mark_img, ((width - mark_img.width) // 2, 96))
 
     draw = ImageDraw.Draw(card)
     for text, y, font, colour in (
@@ -137,8 +201,18 @@ def main() -> None:
     # weight to the deploy.
     write("logo.png", logo)
 
+    # The supplied artwork is a *vertical* lockup: an emblem above a row of ten
+    # letterforms. Scaled to a 28px header that puts each letter under three
+    # pixels wide, so the raster wordmark is illegible at any UI size — and
+    # rendering the artwork next to styled text would also show the name twice.
+    #
+    # So the emblem is cut out and used as the mark, and the wordmark stays
+    # real, selectable, themeable text. Only the emblem is a raster.
+    mark = emblem(logo)
+    write("logo-mark.png", mark)
+
     for size in (16, 32, 48, 64, 180, 192, 512):
-        raster = square(logo, size)
+        raster = square(mark, size)
         name = {180: "apple-touch-icon.png", 192: "icon-192.png", 512: "icon-512.png"}.get(
             size, f"favicon-{size}x{size}.png"
         )
@@ -152,14 +226,14 @@ def main() -> None:
 
     # One social card: Open Graph and Twitter card tags both point at it, so a
     # second copy would be a second copy of the same bytes.
-    write("og-image.png", social_card(logo))
+    write("og-image.png", social_card(mark))
 
     for name in written:
         print(f"  {name}")
 
     print(
-        f"\nUpdate ARTWORK_ASPECT in packages/ui/src/BrandLogo.tsx "
-        f"if it is not already {logo.width}/{logo.height}."
+        f"\nUpdate MARK_ASPECT in packages/ui/src/BrandLogo.tsx "
+        f"if it is not already {mark.width}/{mark.height}."
     )
 
 
