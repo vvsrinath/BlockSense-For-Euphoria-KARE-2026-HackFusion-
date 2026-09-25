@@ -67,13 +67,21 @@ export class ProviderError extends Error {
   readonly status: number;
   /** Chain the failure came from, when known. */
   readonly chain?: string;
+  /**
+   * How long the provider asked us to wait, from its `Retry-After` header.
+   *
+   * A shared public endpoint knows exactly when its quota refills, so guessing
+   * a backoff is worse than obeying the number it gave us.
+   */
+  readonly retryAfterMs?: number;
 
-  constructor(code: ProviderErrorCode, message: string, chain?: string) {
+  constructor(code: ProviderErrorCode, message: string, chain?: string, retryAfterMs?: number) {
     super(message);
     this.name = 'ProviderError';
     this.code = code;
     this.status = STATUS_BY_CODE[code];
     this.chain = chain;
+    this.retryAfterMs = retryAfterMs;
   }
 
   /**
@@ -125,11 +133,12 @@ export class ProviderError extends Error {
     return new ProviderError('RPC_TIMEOUT', `${chain} provider timed out after ${timeoutMs}ms.`, chain);
   }
 
-  static rateLimited(chain?: string): ProviderError {
+  static rateLimited(chain?: string, retryAfterMs?: number): ProviderError {
     return new ProviderError(
       'RPC_RATE_LIMITED',
       `Upstream provider rate limit exceeded${chain ? ` (${chain})` : ''}.`,
-      chain
+      chain,
+      retryAfterMs
     );
   }
 

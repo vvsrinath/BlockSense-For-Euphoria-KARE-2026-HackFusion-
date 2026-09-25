@@ -41,7 +41,9 @@ line('Cache TTL', `${config.cacheTtlSeconds}s`);
 process.stdout.write('\n');
 
 process.stdout.write(
-  `${BOLD}Chain providers${RESET}\n${DIM}  A public endpoint works without a key; a key raises the rate limit.${RESET}\n\n`
+  `${BOLD}Chain providers${RESET}\n` +
+    `${DIM}  A public endpoint works with no setup, but it is shared by every user of it and${RESET}\n` +
+    `${DIM}  will start refusing requests. Setting a URL is what removes that ceiling.${RESET}\n\n`
 );
 
 let keyed = 0;
@@ -55,8 +57,15 @@ for (const chain of supportedChains()) {
   if (hasRpc) keyed += 1;
   else defaulted += 1;
 
-  const source = hasRpc ? `${GREEN}configured${RESET}` : `${YELLOW}public default${RESET}`;
-  const keyLabel = keys.apiKey ? `   ${keys.apiKey}: ${hasKey ? `${GREEN}set${RESET}` : `${YELLOW}missing${RESET}`}` : '';
+  // Naming the URL variable matters most: it is the one that lifts the rate
+  // limit, and the key alone does not help if the request never reaches a
+  // provider that will serve it.
+  const source = hasRpc
+    ? `${GREEN}configured${RESET} ${DIM}${keys.rpcUrl}${RESET}`
+    : `${YELLOW}public default${RESET} ${DIM}set ${keys.rpcUrl}${RESET}`;
+  const keyLabel = keys.apiKey
+    ? `   ${hasKey ? `${GREEN}key set` : `${DIM}key optional (${keys.apiKey})${RESET}`}`
+    : '';
   process.stdout.write(`  ${chain.padEnd(10)} ${source}${keyLabel}\n`);
 }
 
@@ -65,8 +74,12 @@ process.stdout.write('\n');
 const total = supportedChains().length;
 if (keyed === 0) {
   process.stdout.write(
-    `${YELLOW}No provider URLs are configured.${RESET} Every chain is using its public endpoint,\n` +
-      'which is rate limited and can refuse requests. Add at least one URL for reliable runs.\n\n'
+    `${YELLOW}No provider URLs are configured.${RESET} Every chain is being read through its\n` +
+      'shared public endpoint, which is the most likely cause of intermittent\n' +
+      '"could not retrieve the blockchain data" errors. Setting even one URL helps a lot:\n' +
+      `${DIM}  ${supportedChains().map((c) => ENV_KEYS[c].rpcUrl).join('\n  ')}${RESET}\n\n` +
+      `${DIM}  Solana is the first to set: its public endpoint caps requests per IP and is\n` +
+      '  the most likely of the five to refuse a lookup outright.\n\n'
   );
 } else if (defaulted > 0) {
   process.stdout.write(

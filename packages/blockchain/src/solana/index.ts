@@ -43,12 +43,39 @@ const SYSTEM_MOVE = new Set(['transfer', 'transferwithseed']);
 /** SPL token instructions carry a mint and a scaled amount. */
 const TOKEN_MOVE = new Set(['transfer', 'transferchecked']);
 
+/**
+ * Instructions that create a new SPL mint.
+ *
+ * A mint-creation transaction genuinely moves no tokens, so describing it as
+ * "0 SOL transferred" is technically true and completely uninformative — the
+ * reader is looking at the creation of a token and is told nothing happened.
+ */
+const MINT_CREATION = new Set(['initializemint', 'initializemint2', 'createaccount', 'initializedaccount', 'initializedaccount3']);
+
+/** The address of the mint an instruction creates, when it creates one. */
+function createdMint(entry: SolanaEntry): string | null {
+  for (const group of entry.meta?.innerInstructions ?? []) {
+    for (const ix of group.instructions) {
+      const parsed = (ix as { parsed?: { type?: string; info?: Record<string, unknown> } }).parsed;
+      const type = (parsed?.type ?? '').toLowerCase();
+      if (!MINT_CREATION.has(type)) continue;
+      const mint = parsed?.info?.mint;
+      // `createAccount` and `initializeAccount3` carry the account being
+      // created, not necessarily a mint, so only report an actual mint.
+      if (typeof mint === 'string' && (type.startsWith('initializemint') || type === 'createaccount')) return mint;
+    }
+  }
+  return null;
+}
+
 interface SolanaMeta {
   err?: unknown;
   fee?: number;
   preBalances?: number[];
   postBalances?: number[];
   logMessages?: string[];
+  /** Parsed inner instructions, which is where token activity actually appears. */
+  innerInstructions?: { index: number; instructions: SolanaInstruction[] }[];
 }
 
 interface SolanaInstruction {
@@ -211,15 +238,28 @@ export class SolanaAdapter extends BaseAdapter {
       ...(entry.meta?.fee
         ? { fee: { amount: String(fromLamports(entry.meta.fee)), symbol: this.nativeSymbol } }
         : {}),
-      summary: [
-        failed
-          ? `Failed ${amount} ${asset.symbol} transfer`
-          : `${amount} ${asset.symbol} transferred`,
-        ...(entry.meta?.fee ? [`Fee ${fromLamports(entry.meta.fee)} ${this.nativeSymbol}`] : [])
-      ],
+      summary: [this.describe(entry, asset, amount, failed), ...(entry.meta?.fee ? [`Fee ${fromLamports(entry.meta.fee)} ${this.nativeSymbol}`] : [])],
       technical,
       related
     };
+  }
+
+  /**
+   * One sentence saying what the transaction did.
+   *
+   * "0 SOL transferred" is the wrong description for most non-payment
+   * transactions: mints being created, accounts being closed and swaps all move
+   * no lamports, and the amount on its own tells the reader nothing.
+   */
+  private describe(entry: SolanaEntry, asset: TransactionAsset, amount: number, failed: boolean): string {
+    if (failed) return `Failed ${asset.amount} ${asset.symbol} transfer`;
+
+    const mint = createdMint(entry);
+    if (mint) return `Created token mint ${mint.slice(0, 8)}…`;
+
+    if (amount > 0) return `${asset.amount} ${asset.symbol} transferred`;
+
+    return 'No value transfer detected';
   }
 
   override async getTransaction(hash: string): Promise<Transaction> {

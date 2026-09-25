@@ -100,15 +100,23 @@ export function inferChain(input: string): ChainId {
 export function getTransaction(chain: ChainId, hash: string): Promise<Transaction> {
   // The cache holds the raw provider result; pricing is applied outside it so
   // a warm cache still picks up a price change within the TTL.
-  return cache.wrap(cacheKey(chain, 'tx', hash), async () => {
-    const tx = await adapterFor(chain).getTransaction(hash);
-    const [priced] = await activePriceService().enrich([tx]);
-    return priced;
-  });
+  return cache.wrap(
+    cacheKey(chain, 'tx', hash),
+    async () => {
+      const tx = await adapterFor(chain).getTransaction(hash);
+      const [priced] = await activePriceService().enrich([tx]);
+      return priced;
+    },
+    // A confirmed transaction does not become untrue while a provider is rate
+    // limited, so a recent answer beats an error page.
+    { staleOnError: true }
+  );
 }
 
 export function getWallet(chain: ChainId, address: string): Promise<Wallet> {
-  return cache.wrap(cacheKey(chain, 'wallet', address), () => adapterFor(chain).getWallet(address));
+  return cache.wrap(cacheKey(chain, 'wallet', address), () => adapterFor(chain).getWallet(address), {
+    staleOnError: true
+  });
 }
 
 export function getAsset(chain: ChainId, identifier: string): Promise<Asset> {
@@ -121,11 +129,17 @@ export function getHistory(
   options: HistoryOptions = {}
 ): Promise<Transaction[]> {
   const key = cacheKey(chain, 'history', address, options.limit, options.since, options.until);
-  return cache.wrap(key, async () => {
-    const history = await adapterFor(chain).getHistory(address, options);
-    // One batched request for the whole page, not one per transaction.
-    return activePriceService().enrich(history);
-  });
+  return cache.wrap(
+    key,
+    async () => {
+      const history = await adapterFor(chain).getHistory(address, options);
+      // One batched request for the whole page, not one per transaction.
+      return activePriceService().enrich(history);
+    },
+    // The most rate-limited read in the product, so the one that most needs to
+    // survive a throttled provider.
+    { staleOnError: true }
+  );
 }
 
 export function getChainTip(chain: ChainId) {

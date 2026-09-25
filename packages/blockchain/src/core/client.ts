@@ -72,6 +72,26 @@ function isRetryableStatus(status: number): boolean {
 }
 
 /**
+ * How long the provider asked us to wait, in ms.
+ *
+ * `Retry-After` is either a delay in seconds or an HTTP date, and both forms
+ * are accepted. Anything unparseable is ignored rather than guessed at, so the
+ * caller falls back to its own backoff.
+ */
+function retryAfterMs(res: Response): number | undefined {
+  const header = res.headers.get('retry-after');
+  if (!header) return undefined;
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+
+  const date = Date.parse(header);
+  if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+
+  return undefined;
+}
+
+/**
  * Run `attempt` with a bounded retry policy.
  *
  * A `ProviderError` is re-thrown unchanged when its code says the request was
@@ -100,13 +120,32 @@ export async function withRetry<T>(
 
       if (!retryable || i === attempts - 1) throw error;
 
-      // Exponential backoff. A 429 means the provider is throttling, so waiting
-      // longer between attempts is the whole point.
-      await wait(backoffMs * 2 ** i);
+      await wait(backoffFor(error, i, backoffMs));
     }
   }
 
   throw lastError;
+}
+
+/**
+ * How long to wait before the next attempt.
+ *
+ * The three cases are not interchangeable. A 429 is the provider explicitly
+ * saying it is throttling us, so it gets a markedly longer pause — and the
+ * provider's own `Retry-After` when it sent one, which is more accurate than
+ * anything derived from a local guess. A timeout or a 5xx is a blip and only
+ * needs the usual doubling. The jitter matters too: without it, every request
+ * in a burst retries on the same schedule and collides again, which is how a
+ * rate limit becomes self-sustaining.
+ */
+function backoffFor(error: ProviderError, attempt: number, baseMs: number): number {
+  if (error.retryAfterMs !== undefined) return Math.min(error.retryAfterMs, 10_000);
+
+  const scale = error.code === 'RPC_RATE_LIMITED' ? 6 : 1;
+  const exponential = baseMs * scale * 2 ** attempt;
+  // Up to a quarter of the pause, so concurrent callers spread out.
+  const jitter = Math.random() * exponential * 0.25;
+  return Math.min(exponential + jitter, 8_000);
 }
 
 function toTransportError(err: unknown, chain: string, timeoutMs: number): ProviderError {
@@ -160,7 +199,7 @@ export async function rpcCall<T>(
       timeoutMs
     );
 
-    if (res.status === 429) throw ProviderError.rateLimited(chain);
+    if (res.status === 429) throw ProviderError.rateLimited(chain, retryAfterMs(res));
     if (!res.ok) {
       if (isRetryableStatus(res.status)) {
         throw ProviderError.rpcUnavailable(`${chain} RPC responded ${res.status}.`, chain);
@@ -186,7 +225,7 @@ export async function httpGet<T>(
   return withRetry(chain, { timeoutMs, ...policy }, async () => {
     const res = await timedFetch(url, { headers: { accept: 'application/json', ...headers } }, chain, timeoutMs);
 
-    if (res.status === 429) throw ProviderError.rateLimited(chain);
+    if (res.status === 429) throw ProviderError.rateLimited(chain, retryAfterMs(res));
     if (res.status === 404) throw new ProviderError('NOT_FOUND', `${chain} provider has no record at ${url}.`, chain);
     if (!res.ok) {
       if (isRetryableStatus(res.status)) {
@@ -214,7 +253,7 @@ export async function httpGetText(
 
   return withRetry(chain, { timeoutMs, ...policy }, async () => {
     const res = await timedFetch(url, { headers: { accept: 'text/plain', ...headers } }, chain, timeoutMs);
-    if (res.status === 429) throw ProviderError.rateLimited(chain);
+    if (res.status === 429) throw ProviderError.rateLimited(chain, retryAfterMs(res));
     if (!res.ok) {
       if (isRetryableStatus(res.status)) {
         throw ProviderError.rpcUnavailable(`${chain} provider responded ${res.status}.`, chain);
@@ -265,7 +304,7 @@ export async function httpPost<T>(
       timeoutMs
     );
 
-    if (res.status === 429) throw ProviderError.rateLimited(chain);
+    if (res.status === 429) throw ProviderError.rateLimited(chain, retryAfterMs(res));
     if (!res.ok) {
       if (isRetryableStatus(res.status)) {
         throw ProviderError.rpcUnavailable(`${chain} provider responded ${res.status}.`, chain);
