@@ -4,6 +4,7 @@
   "private": true,
   "description": "Lightweight multi-chain blockchain intelligence platform for transaction, wallet, asset and behavioral analysis.",
   "license": "MIT",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=20.0.0"

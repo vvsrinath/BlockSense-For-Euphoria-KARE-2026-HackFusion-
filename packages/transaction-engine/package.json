@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Parses chain-native transactions and normalises them into exact, human-readable amounts.",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

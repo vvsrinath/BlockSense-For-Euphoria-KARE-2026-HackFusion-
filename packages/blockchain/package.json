@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Chain adapters for BlockSense. One BlockchainAdapter implementation per supported network.",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

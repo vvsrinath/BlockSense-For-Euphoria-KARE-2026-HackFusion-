@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Anomaly detection, behavioural DNA, relationship inference and scoring for BlockSense.",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

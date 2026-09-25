@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The BlockSense HTTP API. Serves the web app and any external client.",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {

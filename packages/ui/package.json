@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The BlockSense design system: buttons, panels, badges, modals and layout primitives.",
+  "author": "Srinath Vatchavari Venkateshan <vvsrinath0@gmail.com>",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
