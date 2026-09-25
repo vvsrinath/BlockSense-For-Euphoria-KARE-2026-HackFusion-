@@ -641,21 +641,35 @@ export class TronAdapter extends BaseAdapter {
     // happened before this was separated out.
     const pending = this.readToken(key)
       .then(async (meta) => {
-        if (meta) {
+        // The node drops these constant calls intermittently. A partial answer
+        // still counts: `decimals` may have come through while `name()` did not,
+        // in which case the symbol is the placeholder derived from the contract.
+        // So the provider is consulted for a name, not only for a total failure.
+        const placeholder = symbolFromContract(key);
+        const needsName = !meta || meta.symbol === placeholder;
+
+        if (!needsName && meta) {
           tokenCache.set(key, Promise.resolve(meta));
           return meta;
         }
-        // The node drops these constant calls intermittently, and an unanswered
-        // `decimals()` scales every amount by the wrong power of ten. Fall back
-        // to the price provider, which reports a ticker and a scale for the
-        // same contract and usually has the answer already cached.
+
+        // This matters beyond cosmetics: an unanswered `decimals()` scales every
+        // amount by the wrong power of ten. The provider reports a ticker and a
+        // scale for the same contract, and the price is usually already cached,
+        // so this often costs no extra request.
         const fallback = await activePriceService().tokenMetadata('tron', key);
-        if (!fallback) return null;
+
+        if (!fallback) {
+          if (meta) tokenCache.set(key, Promise.resolve(meta));
+          return meta;
+        }
+
         const resolved: Trc20Meta = {
           symbol: fallback.symbol,
-          // A provider that names a token but not its scale is still better
-          // than no name; 0 keeps the existing "unknown scale" behaviour.
-          decimals: fallback.decimals ?? 0
+          // Prefer the chain's own scale; only take the provider's when the
+          // node did not answer, and a provider that names a token but not its
+          // scale is still better than no name.
+          decimals: meta?.decimals ?? fallback.decimals ?? 0
         };
         tokenCache.set(key, Promise.resolve(resolved));
         return resolved;
