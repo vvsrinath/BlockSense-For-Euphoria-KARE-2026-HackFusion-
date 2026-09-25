@@ -1,0 +1,20 @@
+# Netlify reads this file from the site's base directory (apps/web).
+# Publish paths are therefore relative to apps/web.
+
+[build]
+  command = "pnpm --filter @blocksense/web run build"
+  publish = "dist"
+
+[build.environment]
+  # Matches the version this project declares in package.json engines and the
+  # one the test suite runs on.
+  NODE_VERSION = "20"
+
+# Single-page app: every unknown path belongs to the client router, so it is
+# served from index.html and the router resolves the route. Rules without
+# `force = true` only apply when no file matches, so hashed assets under
+# /assets/ are unaffected.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

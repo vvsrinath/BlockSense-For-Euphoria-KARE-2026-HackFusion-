@@ -2,6 +2,16 @@ const token = (name) => `rgb(var(${name}) / <alpha-value>)`;
 
 export default {
   darkMode: 'class',
+
+  // Tailwind must scan both the app and the workspace packages, or every class
+  // used inside packages/ui is purged from the build. These globs are relative
+  // to this file, hence the ../../packages path.
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+    '../../packages/*/src/**/*.{js,ts,jsx,tsx}'
+  ],
+
   theme: {
     extend: {
       colors: {
@@ -36,13 +46,7 @@ export default {
         out: 'cubic-bezier(0.23, 1, 0.32, 1)',
       },
       maxWidth: {
-        content: [
-  './index.html',
-  './src/**/*.{js,ts,jsx,tsx}',
-  // The design system lives in a workspace package, so Tailwind must scan it
-  // or every class used inside packages/ui would be purged from the build.
-  '../../packages/*/src/**/*.{js,ts,jsx,tsx}'
-],
+        content: '72rem'
       },
     },
   },

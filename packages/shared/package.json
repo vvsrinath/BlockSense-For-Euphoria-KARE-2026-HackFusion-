@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "tailwind-merge": "^2.5.0",
     "zod": "^3.23.8"
   }
 }
