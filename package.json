@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "check:env": "tsx scripts/check-env.ts",
     "smoke:analysis": "tsx scripts/smoke-analysis.ts",
+    "brand:assets": "python3 scripts/build-brand-assets.py",
     "setup": "tsx scripts/setup.ts",
     "clean": "rimraf \"apps/*/dist\" \"packages/*/dist\" \"*.tsbuildinfo\"",
     "lint:fix": "eslint . --fix"

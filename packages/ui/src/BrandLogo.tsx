@@ -1,49 +1,76 @@
-import { useId } from 'react';
 import { cn } from '@blocksense/shared';
+
+/**
+ * The BlockSense brand mark.
+ *
+ * The artwork is a raster file, not an inline SVG, so it comes from
+ * `/public` and is referenced by URL. It is served as a square canvas at every
+ * size: the lockup is wider than it is tall, and stretching it to a square
+ * would distort the letterforms.
+ */
 
 interface BrandLogoProps {
   variant?: 'full' | 'mark';
+  /** Height of the mark in pixels. The width follows the artwork's aspect. */
   size?: number;
   showTagline?: boolean;
+  /**
+   * Set false if the artwork already contains the wordmark, so it is not
+   * rendered twice.
+   */
+  showWordmark?: boolean;
   className?: string;
 }
 
-export function BrandLogo({ variant = 'full', size = 28, showTagline = false, className }: BrandLogoProps) {
-  const gradientId = `bs-grad-${useId().replace(/:/g, '')}`;
+/** Intrinsic aspect of logo.png, kept in sync by scripts/build-brand-assets. */
+const ARTWORK_ASPECT = 419 / 327;
 
-  const mark =
-  <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="shrink-0">
-      <defs>
-        <linearGradient id={gradientId} x1="4" y1="3" x2="28" y2="29" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2563EB" />
-          <stop offset="1" stopColor="#06B6D4" />
-        </linearGradient>
-      </defs>
-      <path d="M5 7a4 4 0 0 1 4-4h9a6 6 0 0 1 0 12H5V7Z" fill={`url(#${gradientId})`} />
-      <path d="M5 17h14.5a6 6 0 0 1 0 12H9a4 4 0 0 1-4-4v-8Z" fill={`url(#${gradientId})`} opacity="0.82" />
-      <rect x="10" y="7.5" width="7" height="3" rx="1.5" className="fill-surface" />
-      <rect x="10" y="21.5" width="8.5" height="3" rx="1.5" className="fill-surface" />
-    </svg>;
+export function BrandLogo({
+  variant = 'full',
+  size = 28,
+  showTagline = false,
+  showWordmark = true,
+  className
+}: BrandLogoProps) {
+  const height = size;
+  const width = Math.round(size * ARTWORK_ASPECT);
 
+  const mark = (
+    <img
+      src="/logo.png"
+      alt=""
+      aria-hidden="true"
+      width={width}
+      height={height}
+      style={{ height: `${height}px`, width: `${width}px` }}
+      className="shrink-0 select-none object-contain"
+    />
+  );
 
   if (variant === 'mark') {
     return (
       <span className={cn('inline-flex', className)} role="img" aria-label="BlockSense">
         {mark}
-      </span>);
-
+      </span>
+    );
   }
+
+  // With the artwork being a wide lockup, the text beside it is only correct
+  // when the artwork is a mark on its own. `showWordmark` is the escape hatch.
+  const withText = showWordmark ? (
+    <span className="flex flex-col leading-none">
+      <span className="font-semibold tracking-tight" style={{ fontSize: Math.round(size * 0.64) }}>
+        <span className="text-brand-ink">Block</span>
+        <span className="text-primary">Sense</span>
+      </span>
+      {showTagline && <span className="mt-1.5 text-xs text-muted">See the transaction. Understand the behavior.</span>}
+    </span>
+  ) : null;
 
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       {mark}
-      <span className="flex flex-col leading-none">
-        <span className="font-semibold tracking-tight" style={{ fontSize: Math.round(size * 0.64) }}>
-          <span className="text-brand-ink">Block</span>
-          <span className="text-primary">Sense</span>
-        </span>
-        {showTagline && <span className="mt-1.5 text-xs text-muted">See the transaction. Understand the behavior.</span>}
-      </span>
-    </span>);
-
+      {withText}
+    </span>
+  );
 }
