@@ -1,0 +1,126 @@
+/* @import url() FONT IMPORTS MUST ALWAYS BE AT THE VERY TOP OF THIS FILE, ABOVE THE TAILWIND IMPORTS — DO NOT DELETE THIS COMMENT */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* CRITICAL: THE FOLLOWING TAILWIND IMPORTS MUST NEVER BE DELETED OR REORDERED — DO NOT DELETE THIS COMMENT */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* END TAILWIND IMPORTS — ALL OTHER CSS MUST GO BELOW THIS LINE */
+
+:root {
+  --bg: 247 249 252;
+  --surface: 255 255 255;
+  --subtle: 241 245 249;
+  --ink: 17 24 39;
+  --brand-ink: 15 30 70;
+  --muted: 100 116 139;
+  --line: 229 234 241;
+  --line-strong: 203 213 225;
+  --primary: 37 99 235;
+  --cyan: 6 182 212;
+  --success: 22 163 74;
+  --success-ink: 21 128 61;
+  --warning: 245 158 11;
+  --warning-ink: 180 83 9;
+  --danger: 239 68 68;
+  --danger-ink: 185 28 28;
+  --purple: 124 58 237;
+  --orange: 234 88 12;
+  color-scheme: light;
+}
+.dark {
+  --bg: 11 18 32;
+  --surface: 17 24 39;
+  --subtle: 30 41 59;
+  --ink: 248 250 252;
+  --brand-ink: 255 255 255;
+  --muted: 148 163 184;
+  --line: 30 41 59;
+  --line-strong: 51 65 85;
+  --primary: 59 130 246;
+  --cyan: 34 211 238;
+  --success: 34 197 94;
+  --success-ink: 74 222 128;
+  --warning: 245 158 11;
+  --warning-ink: 251 191 36;
+  --danger: 239 68 68;
+  --danger-ink: 248 113 113;
+  --purple: 167 139 250;
+  --orange: 251 146 60;
+  color-scheme: dark;
+}
+html,
+body,
+#root {
+  min-height: 100%;
+}
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+/* Brand gradient — reserved for logo, primary CTA and key highlights */
+.bg-brand {
+  background-image: linear-gradient(115deg, #2563eb 0%, #0a8fbf 100%);
+}
+.text-brand-gradient {
+  background-image: linear-gradient(100deg, #2563eb 0%, #0891b2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.dark .text-brand-gradient {
+  background-image: linear-gradient(100deg, #60a5fa 0%, #22d3ee 100%);
+}
+/* Hero network illustration */
+@keyframes bs-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.bs-flow {
+  stroke-dasharray: 4 8;
+  animation: bs-flow 1.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-flow {
+    animation: none;
+  }
+}
+/* React Flow theming */
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: rgb(var(--line-strong));
+}
+.react-flow__controls {
+  box-shadow: none !important;
+  border: 1px solid rgb(var(--line));
+  border-radius: 12px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: rgb(var(--surface)) !important;
+  border-bottom: 1px solid rgb(var(--line)) !important;
+  color: rgb(var(--ink)) !important;
+  fill: rgb(var(--ink)) !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+.react-flow__controls-button:hover {
+  background: rgb(var(--subtle)) !important;
+}
+.react-flow__attribution {
+  background: transparent !important;
+  opacity: 0.5;
+}
+.react-flow__node:focus-visible {
+  outline: none;
+}
+@media print {
+  body {
+    background: #fff;
+  }
+}
