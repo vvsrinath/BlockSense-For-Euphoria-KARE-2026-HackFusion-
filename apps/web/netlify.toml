@@ -1,9 +1,9 @@
-# Netlify reads this file from the site's base directory (apps/web).
-# Publish paths are therefore relative to apps/web.
+# Netlify finds this file in apps/web but resolves relative paths from the
+# repository root, so every path below is written from the root.
 
 [build]
   command = "pnpm --filter @blocksense/web run build"
-  publish = "dist"
+  publish = "apps/web/dist"
 
 [build.environment]
   # Matches the version this project declares in package.json engines and the
