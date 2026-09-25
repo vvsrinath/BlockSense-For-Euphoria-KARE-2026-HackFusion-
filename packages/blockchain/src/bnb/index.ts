@@ -16,6 +16,7 @@ export class BnbAdapter extends EvmAdapter {
   readonly name = 'BNB Chain';
   readonly nativeSymbol = 'BNB';
   readonly decimals = 18;
+  protected readonly apiKeyEnv = BNB_ENV.apiKey;
   protected readonly evmChainId = 56;
 
   constructor(config: AdapterConfig) {

@@ -80,10 +80,12 @@ Then, in the browser: open a real transaction, and confirm the network tab shows
   and two instances will not share them. A database is the fix.
 - **Network graphs are one hop wide.** `depth` is validated and capped at 3, but
   expansion currently visits direct counterparties only.
-- **Ethereum and BNB have no transaction history yet.** `eth_getLogs` cannot
-  answer "everything this address ever did", so those profiles are built from
-  balances alone until an explorer/indexer is wired in. Add `ETHERSCAN_API_KEY`
-  and `BSCSCAN_API_KEY` if you extend the adapter.
+- **Ethereum and BNB history needs an explorer key.** A bare node cannot answer
+  "everything this address ever did" — `eth_getLogs` needs a block range — so
+  `getHistory` uses Etherscan's V2 endpoint, which covers both chains with one
+  key. Without it the route returns `NOT_IMPLEMENTED` naming the variable to
+  set, rather than an empty timeline that would read as "this wallet has never
+  transacted". Balances and single-transaction lookup need no key at all.
 - **The public price feed is DefiLlama**, cached for five minutes. A token it
   does not list keeps no `valueUsd` at all rather than being given a zero.
 - **Nothing is committed from the public endpoints' perspective** — there is no

@@ -13,6 +13,7 @@ export class EthereumAdapter extends EvmAdapter {
   readonly name = 'Ethereum';
   readonly nativeSymbol = 'ETH';
   readonly decimals = 18;
+  protected readonly apiKeyEnv = ETH_ENV.apiKey;
   protected readonly evmChainId = 1;
 
   constructor(config: AdapterConfig) {

@@ -8,7 +8,7 @@
  */
 
 import type { RelatedWallet, TechnicalField, Transaction, TransactionAsset } from '@blocksense/shared';
-import type { ChainTip, HistoryOptions, AdapterConfig } from '../core/adapter';
+import type { AdapterConfig, Balance, ChainTip, HistoryOptions } from '../core/adapter';
 import { BaseAdapter } from '../core/base';
 import type { BaseAdapterOptions } from '../core/adapter';
 import { rpcCall, sameValue } from '../core/client';
@@ -105,11 +105,53 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const ERC721_TRANSFER_TOPIC = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62';
 
 /** Base class for every EVM chain. */
+/**
+ * Etherscan's V2 endpoint serves every supported chain from one base URL and
+ * one key: Ethereum is `chainid=1`, BNB Chain is `chainid=56`. The older
+ * per-chain hosts are deprecated, so both of these adapters share this path.
+ */
+const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api';
+
+/** One row from `action=txlist` or `action=tokentx`. */
+interface EtherscanEntry {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  blockNumber: string;
+  timeStamp: string;
+  input: string;
+  isError: string;
+  gasUsed: string;
+  gasPrice: string;
+}
+
+/** `tokentx` additionally reports the token's own metadata. */
+interface EtherscanTokenEntry extends EtherscanEntry {
+  tokenSymbol: string;
+  tokenName: string;
+  tokenDecimal: string;
+  contractAddress: string;
+  logIndex: string;
+}
+
+interface EtherscanResponse<T> {
+  status: string;
+  message: string;
+  result: T | string;
+}
+
 export abstract class EvmAdapter extends BaseAdapter {
   protected readonly config: AdapterConfig;
 
   /** Chain id reported by `eth_chainId`, used to verify the provider. */
   protected abstract readonly evmChainId: number;
+
+  /**
+   * Environment variable holding the explorer key, named in errors so a
+   * reader knows exactly what to set.
+   */
+  protected abstract readonly apiKeyEnv: string;
 
   constructor(config: AdapterConfig & Partial<Pick<BaseAdapterOptions, 'id' | 'name' | 'nativeSymbol' | 'decimals'>>) {
     super({
@@ -159,7 +201,28 @@ export abstract class EvmAdapter extends BaseAdapter {
    * fields comes from the receipt — status, fee, confirmations, and any
    * ERC-20/721 movement carried in the logs.
    */
-  protected async buildTransaction(raw: EvmRawTransaction, ctx: EvmTransactionContext): Promise<Transaction> {
+  protected buildTransaction(raw: EvmRawTransaction, ctx: EvmTransactionContext): Transaction {
+    return this.assemble(raw, ctx);
+  }
+
+  /**
+   * The single place a transaction is shaped.
+   *
+   * Both entry points go through here: reading a hash from a node, where token
+   * transfers come from event logs and decimals are unavailable, and reading
+   * history from an explorer, where the transfer metadata is already resolved.
+   * Keeping one builder means a transaction looks the same however it was found.
+   *
+   * `resolvedTransfers` replaces the log-derived entries when a source knows the
+   * token's ticker and scale; `tokenOnly` drops a zero-value native entry from
+   * the front, since "0 ETH transferred" is noise on a token transfer.
+   */
+  protected assemble(
+    raw: EvmRawTransaction,
+    ctx: EvmTransactionContext,
+    resolvedTransfers: TransactionAsset[] = [],
+    tokenOnly = false
+  ): Transaction {
     const amount = fromWei(raw.value, this.decimals);
     const blockNumber = raw.blockNumber ? hexToNumber(raw.blockNumber) : 0;
     const isPending = !raw.blockNumber;
@@ -176,15 +239,19 @@ export abstract class EvmAdapter extends BaseAdapter {
     // Token decimals live in a contract call, and reading them needs an
     // explorer. The amount is therefore reported in raw base units and labelled
     // as such, rather than being scaled by a guessed 18.
+    const nativeAsset: TransactionAsset = {
+      type: 'native',
+      name: this.name,
+      symbol: this.nativeSymbol,
+      amount: String(amount),
+      decimals: this.decimals
+    };
+
     const assets: TransactionAsset[] = [
-      {
-        type: 'native',
-        name: this.name,
-        symbol: this.nativeSymbol,
-        amount: String(amount),
-        decimals: this.decimals
-      },
-      ...transfers.map((log): TransactionAsset => {
+      ...(tokenOnly ? [] : [nativeAsset]),
+      ...(resolvedTransfers.length > 0
+        ? resolvedTransfers
+        : transfers.map((log): TransactionAsset => {
         const nft = this.isNftTransfer(log);
         return {
           type: nft ? 'nft' : 'token',
@@ -196,7 +263,7 @@ export abstract class EvmAdapter extends BaseAdapter {
           contractAddress: log.address,
           standard: nft ? 'ERC-721' : 'ERC-20'
         };
-      })
+      }))
     ];
 
     const gasUsed = hexToBigInt(ctx.receipt?.gasUsed);
@@ -228,11 +295,14 @@ export abstract class EvmAdapter extends BaseAdapter {
       technical.push({ label: 'Gas used', value: gasUsed.toString() });
       technical.push({ label: 'Gas price', value: `${gasPrice.toString()} wei` });
     }
-    if (transfers.length > 0) {
+    const transferCount = resolvedTransfers.length > 0 ? resolvedTransfers.length : transfers.length;
+    if (transferCount > 0) {
       technical.push({
         label: 'Token transfers',
-        value: String(transfers.length),
-        hint: 'Token decimals require an explorer API (Etherscan/BSCScan).'
+        value: String(transferCount),
+        ...(resolvedTransfers.length > 0
+          ? {}
+          : { hint: 'Token decimals require an explorer API (Etherscan/BSCScan).' })
       });
     }
 
@@ -314,16 +384,173 @@ export abstract class EvmAdapter extends BaseAdapter {
     );
   }
 
-  override async getHistory(_address: string, _options: HistoryOptions = {}): Promise<Transaction[]> {
-    // Walking an address's history needs an indexer; a bare node cannot answer
-    // "every transaction touching this address". Say so rather than returning an
-    // empty list that reads as "this wallet has never transacted".
+/**
+   * Address history from the explorer API.
+   *
+   * A bare node genuinely cannot answer "every transaction touching this
+   * address" — `eth_getLogs` needs a block range, and scanning the whole chain
+   * is not something a public endpoint will do. So this needs an indexing
+   * provider, and without a key it says exactly that rather than returning an
+   * empty list, which a reader would take for "this wallet has never transacted".
+   */
+  override async getHistory(address: string, options: HistoryOptions = {}): Promise<Transaction[]> {
     this.requireLive();
-    throw ProviderError.notImplemented(
-      `${this.name} address history requires an indexing provider (Etherscan, BSCScan or a dedicated indexer).`,
-      this.id
+    const target = normalizeEvmAddress(address);
+
+    // An empty result and "no indexer configured" are different answers, and
+    // only one of them is a fact about the wallet. Saying so is the whole point
+    // of reporting the gap rather than rendering an empty timeline.
+    if (!this.config.apiKey) {
+      throw ProviderError.notImplemented(
+        `${this.name} address history needs an indexing provider. Set ${this.apiKeyEnv} to enable it; ` +
+          'balances and single-transaction lookup work without one.',
+        this.id
+      );
+    }
+
+    const limit = Math.min(Math.max(options.limit ?? 25, 1), 200);
+    const [native, tokens] = await Promise.all([
+      this.scan('txlist', target, limit),
+      this.scan('tokentx', target, limit)
+    ]);
+
+    // The same transaction appears in both lists when it moved a token, so
+    // index by hash and merge: the token is the headline asset, and any native
+    // value in the same transaction is reported alongside it.
+    const byHash = new Map<string, Transaction>();
+    for (const entry of native) {
+      byHash.set(entry.hash, this.transactionFromEtherscan(entry, []));
+    }
+    for (const entry of tokens as EtherscanTokenEntry[]) {
+      const existing = byHash.get(entry.hash);
+      const token = this.tokenAsset(entry, target);
+      if (!existing) {
+        byHash.set(entry.hash, this.transactionFromEtherscan(entry, [token], true));
+        continue;
+      }
+      const existingAssets = existing.assets ?? [];
+      const assets = [token, ...existingAssets];
+      byHash.set(entry.hash, {
+        ...existing,
+        // A token movement is the reason a reader is looking at the
+        // transaction, so it leads the asset list.
+        asset: token,
+        assets,
+        summary: [
+          assets
+            .map((a) => `${a.amount} ${a.symbol}${a.direction === 'sent' ? ' sent' : ' received'}`)
+            .join(' · ')
+        ]
+      });
+    }
+
+    const ordered = [...byHash.values()].sort((a, b) => b.timestamp - a.timestamp);
+    return options.order === 'asc' ? ordered.reverse() : ordered.slice(0, limit);
+  }
+
+  /**
+   * Current native balance, read from the node.
+   *
+   * This needs no API key, so an EVM profile is never empty just because no
+   * explorer is configured.
+   */
+  override async getBalances(address: string): Promise<Balance[]> {
+    const url = this.requireLive();
+    const target = normalizeEvmAddress(address);
+    const raw = await rpcCall<string>(
+      url,
+      'eth_getBalance',
+      [target, 'latest'],
+      this.id,
+      this.policy
+    );
+    const wei = hexToBigInt(raw);
+    return [
+      {
+        assetId: `${this.id}-native`,
+        symbol: this.nativeSymbol,
+        amount: fromWei(wei, this.decimals),
+        decimals: this.decimals
+      }
+    ];
+  }
+
+  /** One page of an `account` action, or an empty list if the key is unusable. */
+  private async scan(action: 'txlist' | 'tokentx', address: string, limit: number): Promise<EtherscanEntry[]> {
+    const apiKey = this.config.apiKey;
+    if (!apiKey) return [];
+
+    const url =
+      `${ETHERSCAN_V2}?chainid=${this.evmChainId}&module=account&action=${action}` +
+      `&address=${address}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${apiKey}`;
+
+    let body: EtherscanResponse<EtherscanEntry[]>;
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' } });
+      body = (await res.json()) as EtherscanResponse<EtherscanEntry[]>;
+    } catch (err) {
+      throw ProviderError.providerError(`${this.name} explorer request failed: ${String(err)}`, this.id);
+    }
+
+    // `status: "0"` is how this API reports a bad key, a rate limit, or "no
+    // transactions found" — the message distinguishes them, the payload does not.
+    if (body.status !== '1' || !Array.isArray(body.result)) return [];
+    return body.result;
+  }
+
+  private tokenAsset(entry: EtherscanTokenEntry, viewer: string): Transaction['asset'] {
+    const decimals = Number.parseInt(entry.tokenDecimal, 10);
+    const scale = Number.isFinite(decimals) ? decimals : 0;
+    const outbound = entry.from.toLowerCase() === viewer.toLowerCase();
+    return {
+      type: 'token',
+      // The explorer reports the ticker and scale directly, so unlike a node
+      // call this never shows a placeholder derived from the contract.
+      name: entry.tokenName || entry.tokenSymbol,
+      symbol: entry.tokenSymbol || 'TOKEN',
+      amount: String(fromWei(entry.value, scale)),
+      decimals: scale,
+      contractAddress: entry.contractAddress,
+      standard: 'ERC-20',
+      direction: outbound ? 'sent' : 'received'
+    };
+  }
+
+  /** Reuse the shared builder so node-read and explorer-read agree on shape. */
+  private transactionFromEtherscan(
+    entry: EtherscanEntry,
+    tokenAssets: Transaction['asset'][],
+    tokenOnly = false
+  ): Transaction {
+    const raw: EvmRawTransaction = {
+      hash: entry.hash,
+      from: entry.from,
+      to: entry.to,
+      value: entry.value,
+      blockNumber: `0x${Number.parseInt(entry.blockNumber, 10).toString(16)}`,
+      timestamp: Number.parseInt(entry.timeStamp, 10) * 1000,
+      input: entry.input
+    };
+    // The explorer reports success through `isError` rather than a receipt, and
+    // there are no event logs on this path — the transfer list already carried
+    // the token detail. `tip` stays 0, so confirmations read as unknown instead
+    // of implying the transaction is unrecent.
+    return this.assemble(
+      raw,
+      {
+        receipt: {
+          status: entry.isError === '1' ? '0x0' : '0x1',
+          gasUsed: entry.gasUsed,
+          effectiveGasPrice: entry.gasPrice
+        },
+        logs: [],
+        tip: 0
+      },
+      tokenAssets,
+      tokenOnly
     );
   }
+
 
   override async getAsset(identifier: string): Promise<never> {
     this.requireLive();
