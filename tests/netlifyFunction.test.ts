@@ -12,7 +12,28 @@
  */
 
 import { describe, expect, it, beforeAll } from 'vitest';
+
+/**
+ * The function is imported without a declaration file, deliberately.
+ *
+ * TypeScript resolves this specifier to `netlify/functions/api.d.mts`, but
+ * Netlify turns *every* file in the functions directory into a function and
+ * derives its name from the filename. A declaration file there became a
+ * function called `api.d`, and the deploy failed with "change the function
+ * names to contain only alphanumeric characters, hyphens or underscores".
+ *
+ * So the handler's types are declared below instead, which keeps the functions
+ * directory to exactly the one deployable entry point.
+ */
+// @ts-expect-error - no declaration file, for the reason described above
 import { handler } from '../netlify/functions/api.mjs';
+
+/** The shape the handler returns, declared here rather than beside the function. */
+interface NetlifyResult {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: string;
+}
 
 /** The subset of Netlify's event object the handler actually reads. */
 function netlifyEvent(
@@ -34,7 +55,7 @@ function netlifyEvent(
 }
 
 async function invoke(path: string, options?: Parameters<typeof netlifyEvent>[1]) {
-  const res = await handler(netlifyEvent(path, options), {});
+  const res = (await handler(netlifyEvent(path, options), {})) as NetlifyResult;
   // serverless-http returns Netlify's `{ statusCode, headers, body }` shape
   // rather than a web Response, so the body is read directly.
   const text = typeof res.body === 'string' ? res.body : String(res.body ?? '');

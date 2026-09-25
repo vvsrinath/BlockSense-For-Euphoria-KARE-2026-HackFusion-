@@ -131,14 +131,38 @@ export function createApiServer() {
   });
 }
 
-// Only listen when executed directly, so tests can import `createApiServer`.
-// Comparing resolved paths rather than `import.meta.url` matters here: a path
-// containing spaces is percent-encoded in the URL, so string comparison would
-// silently never match.
-const isDirectRun =
-  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+/**
+ * Whether this module was executed directly, rather than imported.
+ *
+ * The entrypoint has to be safe to import, or the test suite cannot reach
+ * `createApiServer` without opening a socket.
+ *
+ * The comparison is on resolved paths because a path containing spaces — which
+ * this repository's does — arrives percent-encoded in a URL, so comparing the
+ * raw strings would silently never match.
+ *
+ * `import.meta` is read defensively. The Netlify function is bundled by
+ * esbuild, and when the nearest package.json has no `type: module` the bundler
+ * emits CommonJS, where `import.meta` is an empty object. Calling
+ * `fileURLToPath` on that throws at module load, which takes the whole function
+ * down rather than merely skipping the listen.
+ */
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
 
-if (isDirectRun) {
+  const meta = import.meta as ImportMeta & { url?: string };
+  if (typeof meta.url !== 'string' || meta.url.length === 0) return false;
+
+  try {
+    return fileURLToPath(meta.url) === path.resolve(entry);
+  } catch {
+    // A bundled or otherwise unresolvable module URL means "not a direct run".
+    return false;
+  }
+}
+
+if (isDirectRun()) {
   setLogLevel(config.logLevel);
 
   if (!config.useLiveData) {

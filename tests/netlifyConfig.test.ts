@@ -17,7 +17,7 @@
  * harmless — Netlify prefers it and then refuses to build.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -76,6 +76,86 @@ describe('netlify.toml lives only at the repository root', () => {
     expect(dir).toBeTruthy();
     expect(dir!.startsWith('/')).toBe(false);
     expect(dir!.includes('..')).toBe(false);
+  });
+});
+
+describe('the functions directory holds one deployable entry point', () => {
+  /**
+   * Netlify turns *every* file in the functions directory into a function and
+   * derives its name from the filename. A TypeScript declaration file added
+   * beside the function became a function called `api.d`, and the deploy failed:
+   *
+   *   The following serverless functions failed to deploy: api.d
+   *
+   * so the name has to be legal, and nothing extra can be left in the folder.
+   */
+  const functionsDir = resolve(repo, 'netlify/functions');
+  const entries = readdirSync(functionsDir);
+
+  it('contains nothing but the function entry point', () => {
+    expect(entries).toEqual(['api.mjs']);
+  });
+
+  it('has no declaration, source map, or type file', () => {
+    // Anything with a dot in its name other than `.mjs` becomes an illegal
+    // function name; a `.ts` file would also be bundled a second time.
+    const unexpected = entries.filter((name) => {
+      const ext = name.slice(name.lastIndexOf('.'));
+      return ext !== '.mjs';
+    });
+    expect(unexpected).toEqual([]);
+  });
+
+  it('names the function with only characters Netlify accepts', () => {
+    // Netlify allows alphanumerics, hyphens, and underscores, and strips the
+    // extension first. `api.d.mts` therefore became the function `api.d` — a
+    // dot is not an accepted character, and that failed the deploy.
+    for (const name of entries) {
+      const base = name.replace(/\.[^.]+$/, '');
+      expect(base).toMatch(/^[A-Za-z0-9_-]+$/);
+    }
+  });
+
+  it('exports a handler', async () => {
+    // Importing the module is also the only way to catch a load-time throw, such
+    // as reading `import.meta.url` from a CommonJS bundle.
+    const module = (await import(resolve(functionsDir, 'api.mjs'))) as { handler?: unknown };
+    expect(typeof module.handler).toBe('function');
+  });
+
+  it('is a file rather than a directory', () => {
+    // A nested directory would be bundled under its own name.
+    expect(statSync(functionsDir).isDirectory()).toBe(true);
+    for (const name of entries) {
+      expect(statSync(resolve(functionsDir, name)).isFile()).toBe(true);
+    }
+  });
+});
+
+describe('the API entry point survives a CommonJS bundle', () => {
+  it('bundles to a file that imports without throwing', async () => {
+    // The bundle reads `import.meta.url` to decide whether to listen, and a
+    // CommonJS bundle hands it an empty object. `fileURLToPath(undefined)`
+    // throws, so an unguarded read took the whole function down at load time
+    // instead of merely skipping the listen. Importing is the only way to prove
+    // it does not.
+    const bundle = resolve(repo, 'apps/api/dist/index.js');
+    if (!existsSync(bundle)) return; // Not built; nothing to assert.
+    const module = (await import(bundle)) as { createApiServer?: unknown };
+    expect(typeof module.createApiServer).toBe('function');
+  });
+
+  it('exports a factory rather than listening on import', async () => {
+    // Importing must not open a socket, or the test suite and the function
+    // bootstrap would both hang.
+    const bundle = resolve(repo, 'apps/api/dist/index.js');
+    if (!existsSync(bundle)) return;
+    const before = process.argv[1];
+    const module = (await import(bundle)) as { createApiServer?: unknown };
+    expect(typeof module.createApiServer).toBe('function');
+    // The entrypoint still believes it is the main module, and the guard
+    // returned false rather than throwing.
+    expect(process.argv[1]).toBe(before);
   });
 });
 
