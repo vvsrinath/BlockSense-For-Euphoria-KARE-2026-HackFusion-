@@ -47,8 +47,12 @@ export type {
   SearchResponse
 } from './apiTypes';
 
-/** Whether the app should use mock/demo data instead of the real API. */
-const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? 'true') === 'true';
+/** Whether the app should use mock/demo data instead of the real API.
+ *  Vite replaces import.meta.env.VITE_DEMO_MODE with "" when the variable
+ *  is unset at build time, so the fallback must treat empty string as true.
+ *  Anything that is not explicitly "false" is demo mode — a fresh checkout
+ *  should work with no provider configured. */
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false';
 
 /** Mirrors the API's error codes so the UI can branch without parsing text. */
 export type ApiErrorCode =

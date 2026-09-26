@@ -11,6 +11,12 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
  * and editing a component in packages/ui hot-reloads in the running app.
  */
 export default defineConfig({
+  define: {
+    // Explicitly injected so the browser always sees the value even when
+    // no .env file is present. Anything that is not "false" is demo mode —
+    // a fresh checkout should work with no provider configured.
+    'import.meta.env.VITE_DEMO_MODE': JSON.stringify('true')
+  },
   plugins: [react()],
   resolve: {
     alias: {
