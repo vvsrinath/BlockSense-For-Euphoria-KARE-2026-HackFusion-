@@ -27,6 +27,27 @@ export default [
 
   js.configs.recommended,
 
+  {
+    rules: {
+      // A bare `catch {}` is a deliberate choice in the persistence helpers:
+      // reading or writing localStorage throws in private browsing and when a
+      // quota is exceeded, and there is nothing the caller could do about it
+      // beyond continuing with an empty store. Flagging those as errors pushed
+      // authors towards inventing a handler that swallows the error anyway.
+      'no-empty': ['error', { allowEmptyCatch: true }]
+    }
+  },
+
+  // The service worker is a plain `.js` file served as-is, so it gets neither
+  // the TypeScript nor the browser block below and would otherwise report every
+  // worker global as undefined.
+  {
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.serviceworker, ...globals.browser }
+    }
+  },
+
   // TypeScript everywhere, including type-only files.
   {
     files: ['**/*.{ts,tsx}'],

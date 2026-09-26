@@ -57,11 +57,14 @@ export const config = {
   frontendUrl: str('FRONTEND_URL', 'http://localhost:5173'),
 
   /**
-   * Retained for compatibility with the original env file. BlockSense now
-   * always reads live chain data; the flag only survives as a migration aid and
-   * is reported at boot so a stale `false` is visible rather than silent.
+   * Whether to read real chain data.
+   *
+   * Defaults to `false`: the API serves generated demo data unless someone
+   * deliberately opts in, so a fresh checkout never depends on a provider being
+   * reachable or configured. `DEMO_MODE` overrides this flag in either
+   * direction, which keeps a stale value in either one from being ambiguous.
    */
-  useLiveData: bool('USE_LIVE_DATA', true),
+  useLiveData: bool('USE_LIVE_DATA', false),
 
   /** How long a successful provider response stays cached, in seconds. */
   cacheTtlSeconds: num('CACHE_TTL_SECONDS', 60),

@@ -21,6 +21,7 @@ import { logger, requestId, setLogLevel } from './middleware/logger';
 import { readJsonBody } from './middleware/router';
 import { RateLimiter, clientKey, securityHeaders } from './middleware/security';
 import { createRouter } from './routes/index';
+import { USE_MOCK } from './services/index';
 
 const router = createRouter();
 const rateLimiter = new RateLimiter(config.rateLimit);
@@ -165,17 +166,17 @@ function isDirectRun(): boolean {
 if (isDirectRun()) {
   setLogLevel(config.logLevel);
 
-  if (!config.useLiveData) {
-    // Loud, because a stale `USE_LIVE_DATA=false` would otherwise silently
-    // leave the app reading real chains while claiming to be in demo mode.
-    logger.warn('USE_LIVE_DATA is false. BlockSense serves live chain data regardless.');
+  if (USE_MOCK) {
+    logger.warn('Demo mode: serving generated data. No live chain is contacted.', {
+      resolvedBy: process.env.DEMO_MODE ? 'DEMO_MODE' : 'USE_LIVE_DATA'
+    });
   }
 
   createApiServer().listen(config.port, config.host, () => {
     logger.info('BlockSense API listening', {
       url: `http://localhost:${config.port}/api/v1`,
       env: config.env,
-      data: 'live',
+      data: USE_MOCK ? 'mock' : 'live',
       chains: ['ethereum', 'bnb', 'tron', 'solana', 'bitcoin']
     });
   });

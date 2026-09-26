@@ -1,38 +1,18 @@
-import { useState } from 'react';
 import { GithubIcon, LinkedinIcon, MailIcon } from 'lucide-react';
 import { developer } from '../../data/developer';
 import { cn } from '@blocksense/shared';
+import { DeveloperPortrait } from './DeveloperPortrait';
 
 /**
  * The author card.
  *
- * The portrait is optional. If the file is missing the initials render instead,
- * because a broken image icon on an about page looks like a bug, and a
- * monogram is a deliberate fallback rather than a placeholder.
+ * Reuses `DeveloperPortrait` so the photo and its initials fallback behave the
+ * same way here and in the contact section.
  */
 export function DeveloperCard() {
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const showPhoto = Boolean(developer.photo) && !photoFailed;
-
   return (
     <div className="flex flex-col items-center gap-6 rounded-2xl border border-line bg-surface p-6 text-center shadow-card sm:flex-row sm:items-start sm:gap-7 sm:p-7 sm:text-left">
-      <span className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 sm:h-32 sm:w-32">
-        {showPhoto ? (
-          <img
-            src={developer.photo}
-            alt={`${developer.name}, the developer of BlockSense`}
-            width={128}
-            height={128}
-            loading="lazy"
-            onError={() => setPhotoFailed(true)}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <span className="text-2xl font-semibold text-primary" aria-hidden="true">
-            {developer.initials}
-          </span>
-        )}
-      </span>
+      <DeveloperPortrait eager className="h-28 w-28 sm:h-32 sm:w-32" />
 
       <div className="min-w-0 flex-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">{developer.name}</h2>

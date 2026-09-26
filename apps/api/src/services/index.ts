@@ -11,14 +11,8 @@
  */
 
 import type {
-  Asset,
-  ChainId,
-  ChainInfo,
-  NetworkEntity,
-  NetworkGraphData,
-  NetworkLink,
-  Transaction,
-  Wallet
+  Asset, ChainId, ChainInfo, NetworkEntity, NetworkGraphData, NetworkLink,
+  Transaction, Wallet
 } from '@blocksense/shared';
 import { ProviderError } from '@blocksense/blockchain';
 import { activePriceService, createAdapter, detectInput, getChain, supportedChains } from '@blocksense/blockchain';
@@ -27,6 +21,7 @@ import { analyzeTransaction, buildGraph } from '@blocksense/intelligence';
 import type { AnalysisResult } from '@blocksense/intelligence';
 import { config, requestPolicy } from '../config/index';
 import { TtlCache, cacheKey } from '../middleware/cache';
+import { MOCK_DATA } from '@blocksense/shared';
 
 /** Shared across adapters so a second identical request costs nothing. */
 const cache = new TtlCache({ ttlMs: config.cacheTtlSeconds * 1000, maxEntries: 500 });
@@ -37,20 +32,29 @@ const MAX_GRAPH_DEPTH = 3;
 /** Adapters are memoised so a burst of requests reuses one set of connections. */
 const adapters = new Map<ChainId, BlockchainAdapter>();
 
+/**
+ * Whether to serve generated demo data instead of reading live chains.
+ *
+ * `DEMO_MODE` wins when it is set, so a stale `USE_LIVE_DATA` cannot silently
+ * decide the mode. With neither set, the API stays on demo data, because a fresh
+ * checkout should not require a reachable provider.
+ */
+export const USE_MOCK = (() => {
+  const demo = process.env.DEMO_MODE?.trim().toLowerCase();
+  if (demo === 'true' || demo === '1' || demo === 'yes' || demo === 'on') return true;
+  if (demo === 'false' || demo === '0' || demo === 'no' || demo === 'off') return false;
+  return !config.useLiveData;
+})();
+
 /** Per-chain provider credentials, all optional and all server-side only. */
 function adapterConfig(chain: ChainId): AdapterConfig {
   const base = { policy: { ...requestPolicy } };
   switch (chain) {
-    case 'ethereum':
-      return { ...base, rpcUrl: config.ethereum.rpcUrl, apiKey: config.ethereum.apiKey };
-    case 'bnb':
-      return { ...base, rpcUrl: config.bnb.rpcUrl, apiKey: config.bnb.apiKey };
-    case 'tron':
-      return { ...base, rpcUrl: config.tron.rpcUrl, apiKey: config.tron.apiKey };
-    case 'solana':
-      return { ...base, rpcUrl: config.solana.rpcUrl, apiKey: config.solana.apiKey };
-    case 'bitcoin':
-      return { ...base, rpcUrl: config.bitcoin.rpcUrl, apiKey: config.bitcoin.apiKey };
+    case 'ethereum': return { ...base, rpcUrl: config.ethereum.rpcUrl, apiKey: config.ethereum.apiKey };
+    case 'bnb': return { ...base, rpcUrl: config.bnb.rpcUrl, apiKey: config.bnb.apiKey };
+    case 'tron': return { ...base, rpcUrl: config.tron.rpcUrl, apiKey: config.tron.apiKey };
+    case 'solana': return { ...base, rpcUrl: config.solana.rpcUrl, apiKey: config.solana.apiKey };
+    case 'bitcoin': return { ...base, rpcUrl: config.bitcoin.rpcUrl, apiKey: config.bitcoin.apiKey };
   }
 }
 
@@ -58,9 +62,71 @@ export function adapterFor(chain: ChainId): BlockchainAdapter {
   const existing = adapters.get(chain);
   if (existing) return existing;
 
-  const adapter = createAdapter(chain, adapterConfig(chain));
+  const adapter = USE_MOCK ? createMockAdapter(chain) : createAdapter(chain, adapterConfig(chain));
   adapters.set(chain, adapter);
   return adapter;
+}
+
+/** Create mock adapters that return auto-generated demo data. */
+function createMockAdapter(chain: ChainId): BlockchainAdapter {
+  const chainInfo = getChain(chain);
+  const r = () => Math.random();
+
+  // Caches are per adapter rather than module-wide: the same 32-byte string can
+  // be a Bitcoin txid and a TRON hash, and a shared cache would hand one chain's
+  // generated record to the other.
+  const txCache = new Map<string, Transaction>();
+  const walletCache = new Map<string, Wallet>();
+
+  return {
+    id: chain,
+    name: chainInfo.name,
+    nativeSymbol: chainInfo.symbol,
+    isLive: false,
+    async getTransaction(hash: string) {
+      const cached = txCache.get(hash);
+      if (cached) return cached;
+      // Generated on this adapter's chain so the `:chain` in the URL and the
+      // returned record always agree.
+      const tx = MOCK_DATA.generateTransaction(r, hash, chain);
+      txCache.set(hash, tx);
+      return tx;
+    },
+    async getWallet(address: string) {
+      const cached = walletCache.get(address);
+      if (cached) return cached;
+      const wallet = MOCK_DATA.generateWallet(r, address, chain);
+      walletCache.set(address, wallet);
+      return wallet;
+    },
+    async getBalances(_address: string) {
+      // Balances come from the chain's own asset list, so a Bitcoin wallet never
+      // reports a BEP-20 token holding.
+      return MOCK_DATA.generateAssetsForChain(r, chain).map((asset) => ({
+        assetId: asset.id,
+        symbol: asset.symbol,
+        amount: Math.random() * 1000,
+        decimals: asset.decimals ?? 18,
+        valueUsd: Math.round(Math.random() * 5000 * 100) / 100
+      }));
+    },
+    async getHistory(_address: string, options?: HistoryOptions) {
+      const limit = options?.limit ?? 25;
+      return Array.from({ length: limit }, () => MOCK_DATA.generateTransaction(r, undefined, chain));
+    },
+    async getAsset(identifier: string) {
+      return MOCK_DATA.generateAsset(r, identifier, chain);
+    },
+    async getTip() {
+      // Heights drift from the chain's real head rather than being drawn from a
+      // flat range, which would put Bitcoin above Solana's slot count.
+      return {
+        chain,
+        height: chainInfo.latestHeight + Math.floor(Math.random() * 1000),
+        unit: chainInfo.latestLabel === 'Latest slot' ? ('slot' as const) : ('block' as const)
+      };
+    },
+  };
 }
 
 /**
@@ -98,8 +164,6 @@ export function inferChain(input: string): ChainId {
 }
 
 export function getTransaction(chain: ChainId, hash: string): Promise<Transaction> {
-  // The cache holds the raw provider result; pricing is applied outside it so
-  // a warm cache still picks up a price change within the TTL.
   return cache.wrap(
     cacheKey(chain, 'tx', hash),
     async () => {
@@ -107,8 +171,6 @@ export function getTransaction(chain: ChainId, hash: string): Promise<Transactio
       const [priced] = await activePriceService().enrich([tx]);
       return priced;
     },
-    // A confirmed transaction does not become untrue while a provider is rate
-    // limited, so a recent answer beats an error page.
     { staleOnError: true }
   );
 }
@@ -133,11 +195,8 @@ export function getHistory(
     key,
     async () => {
       const history = await adapterFor(chain).getHistory(address, options);
-      // One batched request for the whole page, not one per transaction.
       return activePriceService().enrich(history);
     },
-    // The most rate-limited read in the product, so the one that most needs to
-    // survive a throttled provider.
     { staleOnError: true }
   );
 }
@@ -146,26 +205,7 @@ export function getChainTip(chain: ChainId) {
   return cache.wrap(cacheKey(chain, 'tip'), () => adapterFor(chain).getTip());
 }
 
-/**
- * Build a counterparty graph around an address.
- *
- * The neighbourhood is derived from the wallet's own history rather than taken
- * from the provider, so every chain gets the same shape of graph. Expansion is
- * bounded by `MAX_GRAPH_NODES`/`MAX_GRAPH_EDGES`, which is what stops a hub
- * account from producing an unusable response.
- */
-/**
- * The counterparty graph for an address.
- *
- * Depth is accepted and validated but the traversal is currently one hop: the
- * nodes are built from the focus address's own observed history, which is what a
- * node-level provider can answer without an indexer. Widening this is the job of
- * an indexer, not of guessing at second-hop relationships.
- */
 export async function getNetwork(chain: ChainId, address: string, depth = 2): Promise<NetworkGraphData> {
-  // Reject an out-of-range depth rather than quietly clamping it. A client that
-  // asked for depth 9 and silently received 2 has no way to know its request was
-  // reduced, and would draw conclusions from a shallower graph than it asked for.
   if (!Number.isInteger(depth) || depth < 1 || depth > MAX_GRAPH_DEPTH) {
     throw new ProviderError('NETWORK_LIMIT_EXCEEDED', `depth must be a whole number between 1 and ${MAX_GRAPH_DEPTH}.`);
   }
@@ -200,8 +240,6 @@ export async function getNetwork(chain: ChainId, address: string, depth = 2): Pr
       existingEntity.txCount += 1;
       existingEntity.totalUsd += volume;
     } else {
-      // Stop early rather than truncating afterwards, so the focus node keeps
-      // its full transaction count and the graph stays self-consistent.
       if (entities.size >= config.maxGraphNodes) continue;
       entities.set(counterparty, {
         id: counterparty,
@@ -236,7 +274,6 @@ export async function getNetwork(chain: ChainId, address: string, depth = 2): Pr
     }
   }
 
-  // Keep the focus entity's totals consistent with the history it came from.
   const focusEntity = entities.get(focus);
   if (focusEntity) {
     focusEntity.txCount = history.length;
@@ -256,21 +293,16 @@ export async function analyze(
   focusAddress?: string
 ): Promise<AnalysisResult> {
   const transaction = await getTransaction(chain, hash);
-
-  // Amounts are only anomalous relative to a baseline, and the wallet's own
-  // history is the best baseline available.
   const subject = (focusAddress ?? transaction.from).trim();
   let wallet: Wallet | null = null;
   if (subject) {
     try {
       wallet = await getWallet(chain, subject);
     } catch (err) {
-      // Missing wallet context should degrade the analysis, not fail the request.
       if (!(err instanceof ProviderError)) throw err;
       wallet = null;
     }
   }
-
   return analyzeTransaction(transaction, wallet);
 }
 
@@ -289,13 +321,6 @@ export interface ChainHealth {
   latencyMs?: number;
 }
 
-/**
- * Probe every chain's tip.
- *
- * A chain that is rate limited or down is reported as `down` rather than
- * failing the whole health check — partial availability is the normal state of a
- * public multi-chain front end, and the UI needs to know which chains to trust.
- */
 export async function chainHealth(): Promise<ChainHealth[]> {
   return Promise.all(
     supportedChains().map(async (id): Promise<ChainHealth> => {
@@ -321,7 +346,7 @@ export function health() {
   return {
     status: 'ok' as const,
     env: config.env,
-    dataSource: 'live' as const,
+    dataSource: USE_MOCK ? 'mock' : 'live' as const,
     uptimeSeconds: Math.round(process.uptime()),
     cache: cache.stats(),
     chains: supportedChains().map((id) => ({ id, live: adapterFor(id).isLive }))

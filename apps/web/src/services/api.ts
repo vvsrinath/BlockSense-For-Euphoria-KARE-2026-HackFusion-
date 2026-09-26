@@ -1,6 +1,9 @@
 /**
  * The browser's only door to chain data.
  *
+ * In DEMO_MODE, every request goes through the mock API so the
+ * app works fully offline with auto-generated data.
+ *
  * Every service in this app goes through `apiFetch`, so there is exactly one
  * place that knows the base URL, the response envelope and how an API error
  * becomes a JavaScript `Error`. Nothing in `apps/web` talks to a chain node
@@ -18,6 +21,34 @@ import type {
   Transaction,
   Wallet
 } from '@blocksense/shared';
+import { mockApi } from './mockApi';
+import type {
+  AnalysisResponse,
+  ApiClient,
+  BalanceEntry,
+  ChainHealthResponse,
+  ChainSummary,
+  HealthResponse,
+  IndexResponse,
+  ReportListResponse,
+  SearchResponse
+} from './apiTypes';
+
+export type {
+  AnalysisResponse,
+  ApiClient,
+  BalanceEntry,
+  ChainHealthEntry,
+  ChainHealthResponse,
+  ChainSummary,
+  HealthResponse,
+  IndexResponse,
+  ReportListResponse,
+  SearchResponse
+} from './apiTypes';
+
+/** Whether the app should use mock/demo data instead of the real API. */
+const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? 'true') === 'true';
 
 /** Mirrors the API's error codes so the UI can branch without parsing text. */
 export type ApiErrorCode =
@@ -149,78 +180,54 @@ const post = <T>(path: string, body: unknown) => request<T>('POST', path, body);
  */
 const chainPath = (path: string, chain?: ChainId) => (chain ? path.replace('{chain}', chain) : path);
 
-export const api = {
-  health: () => get<{ status: string; env: string; dataSource: string; chains: { id: ChainId; live: boolean }[] }>('/health'),
+/**
+ * The client is annotated as `ApiClient` so both transports are checked against
+ * one contract. Without the annotation the ternary would export a union of the
+ * two object types and every caller would have to narrow the result.
+ */
+export const api: ApiClient = DEMO_MODE ? createMockApi() : createRealApi();
 
-  chainHealth: () =>
-    get<{
-      status: string;
-      chains: {
-        id: ChainId;
-        live: boolean;
-        status: 'up' | 'down';
-        height?: number;
-        unit?: string;
-        latencyMs?: number;
-        error?: string;
-      }[];
-    }>('/health/chains'),
+function createMockApi(): ApiClient {
+  return {
+    health: () => mockApi.getHealth(),
+    chainHealth: () => mockApi.getChainHealth(),
+    chains: () => mockApi.getChains(),
+    index: () => Promise.resolve({ name: 'BlockSense API', version: '1.0.0', dataSource: 'mock', limits: { cacheTtlSeconds: 60, maxGraphNodes: 25, maxGraphEdges: 50, requestTimeoutMs: 15000 }, routes: [] }),
+    // The chain is forwarded rather than discarded: it is already known from
+    // the URL, and generating a record on a different chain would make the page
+    // contradict the address the user clicked.
+    transaction: (chain, hash) => mockApi.getTransaction(hash, chain),
+    wallet: (chain, address) => mockApi.getWallet(address, chain),
+    walletHistory: (_chain, address, limit = 25) => mockApi.getWalletHistory(address, limit),
+    walletBalances: (_chain, address) => mockApi.getWalletAssets(address),
+    network: (_chain, address, depth = 2) => mockApi.getNetwork(address, depth),
+    asset: (chain, identifier) => mockApi.getAsset(chain, identifier),
+    search: (query, _chain) => mockApi.search(query),
+    analyze: (chain, hash, address) => mockApi.analyze(chain, hash, address),
+    createReport: (chain, hash, address) => mockApi.createReport(chain, hash, address),
+    report: (id) => mockApi.getReport(id),
+    reports: () => mockApi.getReports()
+  };
+}
 
-  chains: () => get<(Record<string, unknown> & { id: ChainId; name: string; symbol: string; live: boolean })[]>('/chains'),
+function createRealApi(): ApiClient {
+  return {
+    health: () => get<HealthResponse>('/health'),
+    chainHealth: () => get<ChainHealthResponse>('/health/chains'),
+    chains: () => get<ChainSummary[]>('/chains'),
+    index: () => get<IndexResponse>('/'),
+    transaction: (chain, hash) => get<Transaction>(chainPath(`/transactions/{chain}/${hash}`, chain)),
+    wallet: (chain, address) => get<Wallet>(chainPath(`/wallets/{chain}/${address}`, chain)),
+    walletHistory: (chain, address, limit = 25) => get<Transaction[]>(chainPath(`/wallets/{chain}/${address}/history?limit=${limit}`, chain)),
+    walletBalances: (chain, address) => get<BalanceEntry[]>(chainPath(`/wallets/{chain}/${address}/balances`, chain)),
+    network: (chain, address, depth = 2) => get<NetworkGraphData>(chainPath(`/wallets/{chain}/${address}/network?depth=${depth}`, chain)),
+    asset: (chain, identifier) => get<Asset>(chainPath(`/assets/{chain}/${identifier}`, chain)),
+    search: (query, chain) => get<SearchResponse>(`/search?q=${encodeURIComponent(query)}${chain ? `&chain=${chain}` : ''}`),
+    analyze: (chain, hash, address) => post<AnalysisResponse>('/analyze', { chain, hash, address, includeNetwork: true }),
+    createReport: (chain, hash, address) => post<Report>('/reports', { chain, hash, address }),
+    report: (id) => get<Report>(`/reports/${id}`),
+    reports: () => get<ReportListResponse>('/reports')
+  };
+}
 
-  /** The API's own route table and limits, used by the API reference page. */
-  index: () =>
-    get<{
-      name: string;
-      version: string;
-      dataSource: string;
-      limits: { cacheTtlSeconds: number; maxGraphNodes: number; maxGraphEdges: number; requestTimeoutMs: number };
-      routes: { method: string; path: string }[];
-    }>('/'),
-
-  transaction: (chain: ChainId, hash: string) => get<Transaction>(chainPath(`/transactions/{chain}/${hash}`, chain)),
-
-  wallet: (chain: ChainId, address: string) => get<Wallet>(chainPath(`/wallets/{chain}/${address}`, chain)),
-
-  walletHistory: (chain: ChainId, address: string, limit = 25) =>
-    get<Transaction[]>(chainPath(`/wallets/{chain}/${address}/history?limit=${limit}`, chain)),
-
-  walletBalances: (chain: ChainId, address: string) =>
-    get<{ assetId: string; symbol: string; amount: number; decimals: number }[]>(
-      chainPath(`/wallets/{chain}/${address}/balances`, chain)
-    ),
-
-  network: (chain: ChainId, address: string, depth = 2) =>
-    get<NetworkGraphData>(chainPath(`/wallets/{chain}/${address}/network?depth=${depth}`, chain)),
-
-  asset: (chain: ChainId, identifier: string) => get<Asset>(chainPath(`/assets/{chain}/${identifier}`, chain)),
-
-  search: (query: string, chain?: ChainId) =>
-    get<{
-      query: string;
-      kind: string;
-      candidates: { chain: ChainId; kind: string; reason: string }[];
-      ambiguous?: boolean;
-      resolved?: { chain: ChainId; type: 'transaction' | 'wallet'; data: Transaction | Wallet };
-      error?: { code: string; message: string };
-    }>(`/search?q=${encodeURIComponent(query)}${chain ? `&chain=${chain}` : ''}`),
-
-  analyze: (chain: ChainId, hash: string, address?: string) =>
-    post<{
-      transaction: Transaction;
-      score: { score: number; level: string; contributing: unknown[] };
-      findings: { level: string; title: string; body: string }[];
-      headline: string;
-      dna: unknown;
-      network?: NetworkGraphData | null;
-    }>('/analyze', { chain, hash, address, includeNetwork: true }),
-
-  createReport: (chain: ChainId, hash: string, address?: string) =>
-    post<Report>('/reports', { chain, hash, address }),
-
-  report: (id: string) => get<Report>(`/reports/${id}`),
-
-  reports: () => get<{ total: number; reports: Omit<Report, 'sections'>[] }>('/reports')
-};
-
-export type Api = typeof api;
+export type Api = ApiClient;

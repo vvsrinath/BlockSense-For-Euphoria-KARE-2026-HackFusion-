@@ -1,7 +1,8 @@
 import { QuoteIcon } from 'lucide-react';
 import { developer, closing, disciplines, interests, origin, principles } from '../../data/developer';
 import { DeveloperCard } from '../../components/public/DeveloperCard';
-import { CtaBand, InfoCard, PageIntro, Section } from '../../components/public/marketing';
+import { ContactDeveloper } from '../../components/public/ContactDeveloper';
+import { CtaBand, InfoCard, PageIntro, Section, SectionHeading } from '../../components/public/marketing';
 
 /** About the project and the person who built it. */
 export function About() {
@@ -93,6 +94,16 @@ export function About() {
           <p className="mt-6 border-l-2 border-primary pl-4 text-base font-medium italic text-ink">
             “{closing.motto}”
           </p>
+        </div>
+      </Section>
+
+      <Section className="pt-0">
+        <SectionHeading
+          title="Get in touch"
+          description={`Messages about the project, a bug, or collaboration go straight to ${developer.shortName}.`}
+        />
+        <div className="mt-8">
+          <ContactDeveloper />
         </div>
       </Section>
 

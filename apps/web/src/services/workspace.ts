@@ -11,10 +11,12 @@
  */
 
 import type { Transaction, Wallet } from '@blocksense/shared';
+import { MOCK_DATA } from './mockData';
 
 /** Bounded so a heavy session cannot fill the origin's storage quota. */
 const MAX_ENTRIES = 40;
 const STORAGE_KEY = 'blocksense.workspace.v1';
+const SEED_KEY = 'blocksense.seeded.v1';
 
 interface Workspace {
   transactions: Transaction[];
@@ -33,7 +35,6 @@ function read(): Workspace {
       wallets: Array.isArray(parsed.wallets) ? parsed.wallets.slice(0, MAX_ENTRIES) : []
     };
   } catch {
-    // Corrupt or unavailable storage must not break the app.
     return EMPTY;
   }
 }
@@ -42,8 +43,6 @@ function write(workspace: Workspace): void {
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(workspace));
   } catch {
-    // Private browsing or a full quota: the session still works, it just will
-    // not remember.
   }
 }
 
@@ -53,23 +52,41 @@ function upsert<T extends { hash?: string; address?: string }>(list: T[], item: 
   return [item, ...rest].slice(0, MAX_ENTRIES);
 }
 
+/** Seed mock data into localStorage on first run so the app works offline. */
+function seedMockData(): void {
+  try {
+    const seeded = globalThis.localStorage?.getItem(SEED_KEY);
+    if (seeded === 'true') return;
+    const { generateMultipleTransactions, generateMultipleWallets } = MOCK_DATA;
+    const txs = generateMultipleTransactions(15);
+    const wallets = generateMultipleWallets(8);
+    write({ transactions: txs, wallets });
+    globalThis.localStorage?.setItem(SEED_KEY, 'true');
+  } catch {
+  }
+}
+
 /** Record a transaction the user opened, newest first. */
 export function rememberTransaction(transaction: Transaction): void {
+  seedMockData();
   const workspace = read();
   write({ ...workspace, transactions: upsert(workspace.transactions, transaction, 'hash') });
 }
 
 /** Record a wallet the user opened, newest first. */
 export function rememberWallet(wallet: Wallet): void {
+  seedMockData();
   const workspace = read();
   write({ ...workspace, wallets: upsert(workspace.wallets, wallet, 'address') });
 }
 
 export function recentTransactions(): Transaction[] {
+  seedMockData();
   return [...read().transactions].sort((a, b) => b.timestamp - a.timestamp);
 }
 
 export function recentWallets(): Wallet[] {
+  seedMockData();
   return read().wallets;
 }
 
@@ -86,7 +103,7 @@ export function knownWallet(address: string): Wallet | undefined {
 export function clearWorkspace(): void {
   try {
     globalThis.localStorage?.removeItem(STORAGE_KEY);
+    globalThis.localStorage?.removeItem(SEED_KEY);
   } catch {
-    // Nothing to do: the data is already unreachable.
   }
 }

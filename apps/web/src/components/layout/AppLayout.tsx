@@ -5,6 +5,7 @@ import { MobileNav } from './MobileNav';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { PageContainer } from './PageContainer';
+import { MobileSidebarProvider } from '../../stores/MobileSidebarContext';
 import { Skeleton } from '@blocksense/ui';
 
 function PageFallback() {
@@ -25,27 +26,28 @@ export function AppLayout() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className="flex min-h-screen w-full bg-bg text-ink">
-      <a href="#main" className="sr-only z-50 rounded-lg bg-surface px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
-        Skip to content
-      </a>
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main id="main" className="flex-1 pb-24 md:pb-0 print:pb-0">
-          <Suspense fallback={<PageFallback />}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}>
-              
-              <Outlet />
-            </motion.div>
-          </Suspense>
-        </main>
+    <MobileSidebarProvider>
+      <div className="flex min-h-screen w-full bg-bg text-ink">
+        <a href="#main" className="sr-only z-50 rounded-lg bg-surface px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
+          Skip to content
+        </a>
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar />
+          <main id="main" className="flex-1 pb-24 md:pb-0 print:pb-0">
+            <Suspense fallback={<PageFallback />}>
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}>
+                <Outlet />
+              </motion.div>
+            </Suspense>
+          </main>
+        </div>
+        <MobileNav />
       </div>
-      <MobileNav />
-    </div>);
+    </MobileSidebarProvider>);
 
 }

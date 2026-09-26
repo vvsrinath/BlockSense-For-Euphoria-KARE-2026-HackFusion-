@@ -1,16 +1,30 @@
 {
+  "id": "/",
   "name": "BlockSense — Crypto Transaction Intelligence",
   "short_name": "BlockSense",
   "description": "Analyse on-chain transaction behaviour across Ethereum, BNB Chain, TRON, Solana and Bitcoin, and score activity against a wallet's own history.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0B1220",
-  "theme_color": "#0B1220",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "categories": ["finance", "productivity", "utilities"],
+  "background_color": "#F7F9FC",
+  "theme_color": "#F7F9FC",
+  "shortcuts": [
+    { "name": "Analyze a transaction", "short_name": "Analyze", "url": "/analyze", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Wallet analysis", "short_name": "Wallet", "url": "/wallet", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Network graph", "short_name": "Network", "url": "/network", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ],
   "icons": [
-    { "src": "/favicon-16x16.png", "sizes": "16x16", "type": "image/png" },
-    { "src": "/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
-    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/favicon-16x16.png", "sizes": "16x16", "type": "image/png", "purpose": "any" },
+    { "src": "/favicon-32x32.png", "sizes": "32x32", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

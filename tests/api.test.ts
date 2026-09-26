@@ -4,11 +4,15 @@
  * The server runs in-process on an ephemeral port, so these exercise the real
  * routing, envelope, validation and error-mapping path rather than a mock of it.
  *
- * Adapters are the only component that reaches the network, and they are
- * installed as fixtures through `setAdapters`. That keeps the suite
- * deterministic without reintroducing a mock data path in normal operation: a
- * test asks for a chain the stub does not implement and gets a real provider
- * error, which is itself worth asserting.
+ * These tests deliberately run in *live* mode — `vitest.config.ts` pins
+ * `DEMO_MODE=false` and `USE_LIVE_DATA=true` so the mode does not depend on
+ * whatever `NODE_ENV` the runner sets. Adapters are installed as fixtures
+ * through `setAdapters`, and a test can ask for a chain no stub implements and
+ * get a real provider error, which is itself worth asserting.
+ *
+ * Generated demo data is the API's default, so that path is covered separately
+ * in `tests/mockData.test.ts`, which asserts on the generators directly and so
+ * does not care which mode is active.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -151,6 +155,8 @@ describe('service metadata', () => {
   });
 
   it('declares that it serves live data', async () => {
+    // This suite runs with the live adapters installed, so the advertised
+    // data source has to agree with the mode the server resolved.
     const { body } = await api('/api/v1');
     expect(body.data.dataSource).toBe('live');
   });

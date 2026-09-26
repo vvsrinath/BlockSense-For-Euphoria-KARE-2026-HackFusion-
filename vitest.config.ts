@@ -9,6 +9,12 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
  * `config/typescript/base.json`; this is the Vite equivalent.
  */
 export default defineConfig({
+  define: {
+    // The web client picks its transport from this, and the URL-shape tests in
+    // `tests/webApiClient.test.ts` assert against the real HTTP paths, so the
+    // suite must not silently take the mock branch.
+    'import.meta.env.VITE_DEMO_MODE': JSON.stringify('false')
+  },
   resolve: {
     // Order matters: Vite matches aliases in the order they are declared, so
     // the subpath must come before the bare package name. These mirror the
@@ -25,6 +31,17 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
-    reporters: 'default'
+    reporters: 'default',
+    env: {
+      // The API resolves its mode from the environment, and it now defaults to
+      // serving generated data. `tests/api.test.ts` is built around live
+      // adapters — it installs stubs and asserts on provider failures — so the
+      // mode is pinned here instead of depending on whatever `NODE_ENV` the
+      // runner happens to set. The generated-data layer is covered separately
+      // in `tests/mockData.test.ts`, which asserts on the generators directly
+      // and so does not care which mode is active.
+      DEMO_MODE: 'false',
+      USE_LIVE_DATA: 'true'
+    }
   }
 });

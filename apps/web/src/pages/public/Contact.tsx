@@ -1,23 +1,35 @@
 import { Link } from 'react-router-dom';
-import { BookOpenIcon, BugIcon, BuildingIcon, LinkedinIcon, MailIcon, RocketIcon, UsersIcon } from 'lucide-react';
+import {
+  ActivityIcon,
+  BookOpenIcon,
+  BugIcon,
+  BuildingIcon,
+  CodeIcon,
+  RocketIcon,
+  UserIcon,
+  UsersIcon
+} from 'lucide-react';
 import { Panel } from '@blocksense/ui';
-import { CtaBand, PageIntro, Section } from '../../components/public/marketing';
+import { CtaBand, PageIntro, Section, SectionHeading } from '../../components/public/marketing';
+import { ContactDeveloper } from '../../components/public/ContactDeveloper';
 import { developer } from '../../data/developer';
 
 const REPO = developer.github;
+const REPO_SLUG = 'BlockSense-For-Euphoria-KARE-2026-HackFusion-';
 
+/**
+ * Everything that is not a direct message.
+ *
+ * Email and LinkedIn are intentionally absent: the developer section above owns
+ * those two, and repeating the same three links in two places on one page makes
+ * the page look busier without making it more useful.
+ */
 const routes = [
   {
-    icon: MailIcon,
-    title: 'Email',
-    body: `The fastest way to reach ${developer.shortName} about the project, a bug, or an idea.`,
-    cta: { label: developer.email, to: `mailto:${developer.email}` }
-  },
-  {
-    icon: LinkedinIcon,
-    title: 'LinkedIn',
-    body: 'Professional background, and a reasonable place to start a conversation about the work.',
-    cta: { label: 'Connect', to: developer.linkedin }
+    icon: BugIcon,
+    title: 'Report a bug',
+    body: 'Something wrong, or something that looks wrong? Open an issue. A transaction hash and what you expected makes it far easier to chase.',
+    cta: { label: 'Open an issue', to: `${REPO}/${REPO_SLUG}/issues` }
   },
   {
     icon: RocketIcon,
@@ -26,10 +38,10 @@ const routes = [
     cta: { label: 'Open the analyzer', to: '/analyze' }
   },
   {
-    icon: BugIcon,
-    title: 'Report a bug',
-    body: 'Something wrong, or something that looks wrong? Open an issue. A transaction hash and what you expected makes it far easier to chase.',
-    cta: { label: 'Open an issue', to: `${REPO}/BlockSense-For-Euphoria-KARE-2026-HackFusion-/issues` }
+    icon: CodeIcon,
+    title: 'Read the source',
+    body: 'Every route, adapter, and analysis in this project is public, with the reasoning behind the design written down.',
+    cta: { label: 'Browse the repository', to: `${REPO}/${REPO_SLUG}` }
   },
   {
     icon: BuildingIcon,
@@ -42,15 +54,27 @@ const routes = [
     title: 'Contributing',
     body: 'The project is open source and the roadmap is public. Architecture, adapter, or intelligence work all have a clear path in.',
     cta: { label: 'Contributing guide', to: '/docs/contributing' }
+  },
+  {
+    icon: ActivityIcon,
+    title: 'Something is down',
+    body: 'Chain providers rate-limit and occasionally time out. The status page reports what is actually responding right now.',
+    cta: { label: 'System status', to: '/status' }
   }
 ];
 
 /**
  * Contact.
  *
- * There is no contact form, because a form needs a mail service and a store of
- * submissions and this project deliberately has neither. A real address and a
- * public repository are more useful than a form that goes nowhere.
+ * The developer section comes first, because "how do I reach the person who made
+ * this" is the reason most people open this page. The route cards after it
+ * cover everything that is not a direct message: the product, the issue tracker,
+ * and pricing.
+ *
+ * There is no contact form anywhere, because a form needs a mail service and a
+ * store of submissions and this project deliberately has neither. A real
+ * address and a public repository are more useful than a form that goes
+ * nowhere.
  */
 export function Contact() {
   return (
@@ -64,7 +88,15 @@ export function Contact() {
       </Section>
 
       <Section className="pt-0">
-        <div className="grid gap-5 md:grid-cols-2">
+        <ContactDeveloper />
+      </Section>
+
+      <Section className="pt-0">
+        <SectionHeading
+          title="Other ways to get help"
+          description="For anything that is not a direct message to the developer, these routes go straight to the thing you need."
+        />
+        <div className="mt-8 grid gap-5 md:grid-cols-2">
           {routes.map((route) => {
             const Icon = route.icon;
             return (
@@ -83,12 +115,6 @@ export function Contact() {
                     href={route.cta.to}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                    {route.cta.label}
-                  </a>
-                ) : route.cta.to.startsWith('mailto:') ? (
-                  <a
-                    href={route.cta.to}
                     className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
                     {route.cta.label}
                   </a>
@@ -119,7 +145,7 @@ export function Contact() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <a
-                  href={`${REPO}/BlockSense-For-Euphoria-KARE-2026-HackFusion-`}
+                  href={`${REPO}/${REPO_SLUG}`}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
@@ -127,7 +153,7 @@ export function Contact() {
                   Open the repository
                 </a>
                 <Link to="/about" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-                  <MailIcon className="h-4 w-4" aria-hidden="true" />
+                  <UserIcon className="h-4 w-4" aria-hidden="true" />
                   About the developer
                 </Link>
               </div>

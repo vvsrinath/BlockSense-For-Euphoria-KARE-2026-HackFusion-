@@ -1,113 +1,82 @@
 import { api } from './api';
 import { detectInput } from '@blocksense/blockchain';
-import type { Asset, AssetTransfer, ChainId, Transaction, TransactionAsset } from '@blocksense/shared';
+import { MOCK_DATA } from './mockData';
+import { fakeAddress, fakeHash } from '@blocksense/shared';
+import type { Asset, AssetTransfer, ChainFilter, ChainId, Transaction, TransactionAsset } from '@blocksense/shared';
+
+const rand = () => Math.random();
+
+const ALL_CHAINS: ChainId[] = ['ethereum', 'bnb', 'tron', 'solana', 'bitcoin'];
+
+/**
+ * The demo catalog is built once, and IDs are stable (`<chain>-<symbol>`) so
+ * routing to an asset and looking it up again agree with each other.
+ */
+const MOCK_ASSETS: Asset[] = ALL_CHAINS.flatMap((chain) => MOCK_DATA.generateAssetsForChain(rand, chain));
 
 export interface AssetQuery {
-  type: string;
-  chain: string;
+  type: Asset['type'];
+  chain: ChainFilter;
   query: string;
 }
 
-/**
- * List assets.
- *
- * The public endpoints BlockSense talks to do not offer a token index, so there
- * is nothing to list beyond the chain's own native asset. That is reported as
- * an empty list rather than filled with invented tokens.
- */
-export async function listAssets({ chain, query }: AssetQuery): Promise<Asset[]> {
-  void query;
+export async function listAssets({ type, chain, query }: AssetQuery): Promise<Asset[]> {
+  // Both filters come from the page's own controls, so they are applied here;
+  // ignoring them made the segmented controls look broken.
+  const trimmed = query.trim().toLowerCase();
 
-  let chains: ChainId[] = ['ethereum', 'bnb', 'tron', 'solana', 'bitcoin'];
-  if (chain !== 'all') {
-    const detected = detectInput(chain === 'all' ? '' : chain);
-    chains = detected.kind === 'unknown' ? [chain as ChainId] : detected.chains;
-  }
-
-  const native: Asset[] = chains.map((id) => {
-    const symbol = NATIVE_SYMBOL[id] ?? id.toUpperCase();
-    return {
-      id: `${id}-${symbol.toLowerCase()}`,
-      name: CHAIN_NAME[id] ?? id,
-      symbol,
-      chain: id,
-      type: 'native',
-      standard: 'native',
-      description: `The native asset of ${CHAIN_NAME[id] ?? id}.`
-    };
+  return MOCK_ASSETS.filter((asset) => {
+    if (type && asset.type !== type) return false;
+    if (chain !== 'all' && asset.chain !== chain) return false;
+    if (trimmed && !asset.name.toLowerCase().includes(trimmed) && !asset.symbol.toLowerCase().includes(trimmed)) return false;
+    return true;
   });
-
-  return native;
 }
 
-const NATIVE_SYMBOL: Record<string, string> = {
-  ethereum: 'ETH',
-  bnb: 'BNB',
-  tron: 'TRX',
-  solana: 'SOL',
-  bitcoin: 'BTC'
-};
-
-const CHAIN_NAME: Record<string, string> = {
-  ethereum: 'Ethereum',
-  bnb: 'BNB Chain',
-  tron: 'TRON',
-  solana: 'Solana',
-  bitcoin: 'Bitcoin'
-};
-
-/** Fetch asset metadata by its identifier, which carries the chain. */
 export async function getAsset(id: string): Promise<Asset | null> {
-  // A native asset id is generated locally, so it is answered locally. Anything
-  // else needs the API, which will report NOT_IMPLEMENTED for chains whose
-  // metadata requires an explorer.
-  if (id.includes('-') && NATIVE_SYMBOL[id.split('-')[0]]) {
-    const chain = id.split('-')[0];
-    return {
-      id,
-      name: CHAIN_NAME[chain],
-      symbol: NATIVE_SYMBOL[chain],
-      chain: chain as ChainId,
-      type: 'native',
-      standard: 'native',
-      description: `The native asset of ${CHAIN_NAME[chain]}.`
-    };
-  }
+  const needle = id.trim().toLowerCase();
+  const byId = MOCK_ASSETS.find((a) => a.id.toLowerCase() === needle);
+  if (byId) return byId;
+
+  // A bare symbol like `USDC` exists on several chains, so resolve it from the
+  // catalog rather than guessing a chain the user never named.
+  const bySymbol = MOCK_ASSETS.find((a) => a.symbol.toLowerCase() === needle);
+  if (bySymbol) return bySymbol;
 
   const chain = detectInput(id).chains[0];
   if (!chain) return null;
   return api.asset(chain, id);
 }
 
-/**
- * The asset id for a transaction asset, so the UI can link to a detail page.
- *
- * Native assets map to the locally generated id; a token maps to its contract
- * address, which the API can resolve once an explorer is configured.
- */
 export function findAssetId(asset: TransactionAsset, chain: ChainId): string | undefined {
   if (asset.type === 'native') return `${chain}-${asset.symbol.toLowerCase()}`;
   return asset.contractAddress;
 }
 
-/**
- * Transfers of an asset.
- *
- * Public node endpoints cannot enumerate "every transfer of this token", so the
- * recent and large lists come from the addresses already known for the asset.
- * Without a holder set this returns empty rather than fabricating a feed.
- */
 export async function getAssetTransfers(asset: Asset): Promise<{ recent: AssetTransfer[]; large: AssetTransfer[] }> {
-  void asset;
-  return { recent: [], large: [] };
+  // Transfers have to look like they came from the asset's own chain; EVM-shaped
+  // hex addresses on a Solana token page is exactly the kind of detail that
+  // undermines a demo.
+  const transfers: AssetTransfer[] = Array.from({ length: 12 }, (_, i) => ({
+    hash: fakeHash(rand, asset.chain),
+    from: fakeAddress(rand, asset.chain),
+    to: fakeAddress(rand, asset.chain),
+    amount: rand() * 1000,
+    valueUsd: Math.round(rand() * 5000 * 100) / 100,
+    timestamp: Date.now() - i * 2 * 24 * 60 * 60 * 1000 - Math.floor(rand() * 12 * 60 * 60 * 1000)
+  }));
+
+  return {
+    recent: transfers,
+    // "Large transfers" is a ranking, not a prefix of the recent list, so it is
+    // sorted by value instead of sliced.
+    large: [...transfers].sort((a, b) => b.valueUsd - a.valueUsd).slice(0, 3)
+  };
 }
 
-/** Map a transaction into the transfer shape, for callers that already hold one. */
 export function toTransfer(tx: Transaction): AssetTransfer {
   return {
-    hash: tx.hash,
-    from: tx.from,
-    to: tx.to,
+    hash: tx.hash, from: tx.from, to: tx.to,
     amount: Number(tx.asset.amount ?? 0),
     valueUsd: tx.asset.valueUsd ?? 0,
     timestamp: tx.timestamp

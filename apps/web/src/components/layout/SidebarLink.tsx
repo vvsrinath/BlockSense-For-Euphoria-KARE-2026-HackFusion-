@@ -6,14 +6,16 @@ interface SidebarLinkProps {
   label: string;
   icon: LucideIcon;
   collapsed: boolean;
+  onClick?: () => void;
 }
 export function SidebarLink({
   to,
   label,
   icon: Icon,
-  collapsed
+  collapsed,
+  onClick
 }: SidebarLinkProps) {
-  return <NavLink to={to} title={collapsed ? label : undefined} className={({
+  return <NavLink to={to} title={collapsed ? label : undefined} onClick={onClick} className={({
     isActive
   }) => cn('flex h-10 items-center gap-3 rounded-xl text-sm font-medium transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', collapsed ? 'justify-center px-0' : 'px-3', isActive ? 'bg-primary/[0.08] text-primary' : 'text-muted hover:bg-subtle hover:text-ink')}>
       <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
