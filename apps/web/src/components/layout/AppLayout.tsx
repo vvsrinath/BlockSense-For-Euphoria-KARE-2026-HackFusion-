@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MobileNav } from './MobileNav';
+import { PWAUpdateBanner } from './PWAInstall';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { PageContainer } from './PageContainer';
@@ -47,6 +48,7 @@ export function AppLayout() {
           </main>
         </div>
         <MobileNav />
+        <PWAUpdateBanner />
       </div>
     </MobileSidebarProvider>);
 

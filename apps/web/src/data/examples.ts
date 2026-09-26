@@ -23,13 +23,16 @@ export interface SearchExample {
 }
 
 export const searchExamples: SearchExample[] = [
-  { label: 'TRON transaction', chain: 'tron', to: `/analyze/tx/${TRON_EXAMPLE_TX}` },
-  { label: 'Solana transaction', chain: 'solana', to: `/analyze/tx/${SOL_EXAMPLE_TX}` },
-  { label: 'TRON wallet', chain: 'tron', to: `/wallet/${TRON_EXAMPLE_WALLET}` },
-  { label: 'Solana wallet', chain: 'solana', to: `/wallet/${SOL_EXAMPLE_WALLET}` },
-  { label: 'Bitcoin wallet', chain: 'bitcoin', to: `/wallet/${BTC_EXAMPLE_WALLET}` },
-  { label: 'Ethereum wallet', chain: 'ethereum', to: `/wallet/${EVM_EXAMPLE_WALLET}` },
-  { label: 'BNB wallet', chain: 'bnb', to: `/wallet/${EVM_EXAMPLE_WALLET}` }
+  // Every link names its chain. Shape detection alone reads a bare-64-hex id as
+  // Bitcoin first and an `0x` address as Ethereum first, so the TRON and BNB
+  // examples would otherwise open on the wrong chain.
+  { label: 'TRON transaction', chain: 'tron', to: `/analyze/tx/${TRON_EXAMPLE_TX}?chain=tron` },
+  { label: 'Solana transaction', chain: 'solana', to: `/analyze/tx/${SOL_EXAMPLE_TX}?chain=solana` },
+  { label: 'TRON wallet', chain: 'tron', to: `/wallet/${TRON_EXAMPLE_WALLET}?chain=tron` },
+  { label: 'Solana wallet', chain: 'solana', to: `/wallet/${SOL_EXAMPLE_WALLET}?chain=solana` },
+  { label: 'Bitcoin wallet', chain: 'bitcoin', to: `/wallet/${BTC_EXAMPLE_WALLET}?chain=bitcoin` },
+  { label: 'Ethereum wallet', chain: 'ethereum', to: `/wallet/${EVM_EXAMPLE_WALLET}?chain=ethereum` },
+  { label: 'BNB wallet', chain: 'bnb', to: `/wallet/${EVM_EXAMPLE_WALLET}?chain=bnb` }
 ];
 
 /** The example used by the landing page call to action: a real TRC-20 transfer. */

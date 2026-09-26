@@ -33,7 +33,7 @@ export function Help() {
                 </li>
               )}
             </ol>
-            <Button to={`/analyze/tx/${TRON_EXAMPLE_TX}`} variant="soft" className="mt-6">
+            <Button to={`/analyze/tx/${TRON_EXAMPLE_TX}?chain=tron`} variant="soft" className="mt-6">
               Walk through the demo
             </Button>
           </Panel>

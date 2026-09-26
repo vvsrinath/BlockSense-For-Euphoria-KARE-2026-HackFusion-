@@ -168,7 +168,14 @@ if (isDirectRun()) {
 
   if (USE_MOCK) {
     logger.warn('Demo mode: serving generated data. No live chain is contacted.', {
-      resolvedBy: process.env.DEMO_MODE ? 'DEMO_MODE' : 'USE_LIVE_DATA'
+      // Mirror the precedence in `USE_MOCK`: DEMO_MODE decides when it is set,
+      // otherwise the answer comes from USE_LIVE_DATA — and with neither set it
+      // is the default, not a flag somebody exported.
+      resolvedBy: process.env.DEMO_MODE
+        ? 'DEMO_MODE'
+        : process.env.USE_LIVE_DATA
+          ? 'USE_LIVE_DATA'
+          : 'default (no flag set)'
     });
   }
 

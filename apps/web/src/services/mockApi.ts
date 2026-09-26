@@ -1,4 +1,5 @@
 import { MOCK_DATA } from '@blocksense/shared';
+import { detectInput, getChain } from '@blocksense/blockchain';
 import type { ChainId, Transaction, Wallet, Asset, NetworkGraphData, Report } from '@blocksense/shared';
 import type {
   AnalysisResponse,
@@ -38,10 +39,6 @@ function delay(ms = 200): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms + rand() * 300));
 }
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(rand() * arr.length)];
-}
-
 export const mockApi = {
   async getHealth(): Promise<HealthResponse> {
     await delay(100);
@@ -77,36 +74,63 @@ export const mockApi = {
       ]
     };
   },
-  async search(query: string): Promise<SearchResponse> {
+  async search(query: string, chainHint?: ChainId): Promise<SearchResponse> {
     await delay(150);
     // Without this the arrays below are still empty on the first search, so the
     // lookup returns `undefined` and the caller crashes instead of showing a
     // result.
     ensureInitialized();
 
-    if (query.length > 40) {
-      const tx = pick(transactions);
+    // The pasted value is resolved rather than answered with a random record:
+    // showing somebody else's wallet for the address they just pasted is worse
+    // than showing nothing. Detection picks the chain, the hint overrides it,
+    // and the record is then generated for that exact identifier.
+    const detection = detectInput(query, chainHint ?? 'all');
+    const chain = chainHint && CHAINS.includes(chainHint) ? chainHint : detection.chains[0];
+
+    if (!chain || detection.kind === 'unknown' || detection.kind === 'block') {
+      return {
+        query,
+        kind: detection.kind,
+        candidates: [],
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'That does not look like an address or transaction hash on any supported chain.'
+        }
+      };
+    }
+
+    const candidates = detection.chains.map((c) => ({
+      chain: c,
+      kind: detection.kind,
+      reason: `${detection.kind} shape matches ${c}`
+    }));
+
+    if (detection.kind === 'transaction') {
+      const tx = await this.getTransaction(query, chain);
       return {
         query,
         kind: 'transaction',
-        // The chain is read off the chosen record, not rolled separately, so
-        // the candidate chain can never disagree with the payload.
-        candidates: [{ chain: tx.chain, kind: 'transaction', reason: `Hash matches ${tx.chain}` }],
+        candidates: candidates.length ? candidates : [{ chain, kind: 'transaction', reason: 'named by request' }],
         resolved: { chain: tx.chain, type: 'transaction', data: tx }
       };
     }
 
-    const wallet = pick(wallets);
+    const wallet = await this.getWallet(query, chain);
     return {
       query,
       kind: 'address',
-      candidates: [{ chain: wallet.chain, kind: 'address', reason: `Address matches ${wallet.chain}` }],
+      candidates: candidates.length ? candidates : [{ chain, kind: 'address', reason: 'named by request' }],
       resolved: { chain: wallet.chain, type: 'wallet', data: wallet }
     };
-  },  async getTransaction(hash: string, chain?: ChainId): Promise<Transaction> {
+  },
+  async getTransaction(hash: string, chain?: ChainId): Promise<Transaction> {
     await delay(200);
     ensureInitialized();
-    const existing = transactions.find((t) => t.hash === hash);
+    // Matched on chain as well as hash: the same 64 hex characters are a valid
+    // Bitcoin txid and a valid TRON id, so a hash-only lookup could hand back
+    // the record generated for the other chain.
+    const existing = transactions.find((t) => t.hash === hash && (chain === undefined || t.chain === chain));
     if (existing) return existing;
     // Generated on the requested chain so the URL a user opened and the record
     // they land on describe the same chain.
@@ -117,44 +141,44 @@ export const mockApi = {
   async getWallet(address: string, chain?: ChainId): Promise<Wallet> {
     await delay(200);
     ensureInitialized();
-    const existing = wallets.find((w) => w.address === address);
+    const existing = wallets.find((w) => w.address === address && (chain === undefined || w.chain === chain));
     if (existing) return existing;
     const created = MOCK_DATA.generateWallet(rand, address, chain);
     wallets.push(created);
     return created;
   },
-  async getWalletHistory(address: string, limit = 25): Promise<Transaction[]> {
+  async getWalletHistory(address: string, limit = 25, chain?: ChainId): Promise<Transaction[]> {
     await delay(200);
     ensureInitialized();
-    const wallet = wallets.find((w) => w.address === address);
-    if (wallet) {
-      return wallet.activity.slice(0, limit).map((a) => ({
-        hash: a.hash,
-        chain: wallet.chain,
-        from: a.direction === 'out' ? address : a.counterparty,
-        to: a.direction === 'out' ? a.counterparty : address,
-        timestamp: a.timestamp,
-        status: 'confirmed' as const,
-        block: 0,
-        confirmations: 0,
-        isDemo: true,
-        asset: { type: 'token' as const, name: a.symbol, symbol: a.symbol, amount: a.amount, valueUsd: a.valueUsd },
-        fee: { amount: '0.001', symbol: 'ETH', valueUsd: 2 },
-        // Reuse the generator's anomaly shape so history rows satisfy the same
-        // `TransactionAnomaly` contract as full transaction records.
-        anomaly: MOCK_DATA.randomAnomaly(rand),
-        summary: [`${a.amount} ${a.symbol} ${a.direction} to ${a.counterparty.slice(0, 6)}…`],
-        technical: [{ label: 'Hash', value: a.hash }],
-        related: []
-      }));
-    }
-    return transactions.slice(0, limit);
+    // The wallet is created when absent rather than falling through to a slice
+    // of unrelated transactions — an address pasted straight into the URL bar
+    // has to produce that address's history on its first request.
+    const wallet = await this.getWallet(address, chain);
+    return wallet.activity.slice(0, limit).map((a) => ({
+      hash: a.hash,
+      chain: wallet.chain,
+      from: a.direction === 'out' ? address : a.counterparty,
+      to: a.direction === 'out' ? a.counterparty : address,
+      timestamp: a.timestamp,
+      status: 'confirmed' as const,
+      block: 0,
+      confirmations: 0,
+      isDemo: true,
+      asset: { type: 'token' as const, name: a.symbol, symbol: a.symbol, amount: a.amount, valueUsd: a.valueUsd },
+      fee: { amount: '0.001', symbol: getChain(wallet.chain).symbol, valueUsd: 2 },
+      // Reuse the generator's anomaly shape so history rows satisfy the same
+      // `TransactionAnomaly` contract as full transaction records.
+      anomaly: MOCK_DATA.randomAnomaly(rand),
+      summary: [`${a.amount} ${a.symbol} ${a.direction} to ${a.counterparty.slice(0, 6)}…`],
+      technical: [{ label: 'Hash', value: a.hash }],
+      related: []
+    }));
   },
-  async getWalletAssets(address: string): Promise<BalanceEntry[]> {
+  async getWalletAssets(address: string, chain?: ChainId): Promise<BalanceEntry[]> {
     await delay(150);
     ensureInitialized();
-    const wallet = wallets.find((w) => w.address === address);
-    const scoped = wallet ? assets.filter((a) => a.chain === wallet.chain) : assets;
+    const wallet = await this.getWallet(address, chain);
+    const scoped = assets.filter((a) => a.chain === wallet.chain);
     const pool = scoped.length ? scoped : assets;
     return pool.slice(0, 5).map((a) => ({
       assetId: a.id,
@@ -164,17 +188,18 @@ export const mockApi = {
       valueUsd: Math.round(rand() * 5000 * 100) / 100
     }));
   },
-  async getNetwork(address: string, depth = 2): Promise<NetworkGraphData> {
+  async getNetwork(address: string, depth = 2, chain?: ChainId): Promise<NetworkGraphData> {
     await delay(300);
     ensureInitialized();
-    const wallet = wallets.find((w) => w.address === address);
-    const chain = wallet?.chain ?? 'ethereum';
-    return MOCK_DATA.generateNetworkGraph(rand, address, chain, depth);
+    const wallet = await this.getWallet(address, chain);
+    return MOCK_DATA.generateNetworkGraph(rand, address, wallet.chain, depth);
   },
   async getAsset(chain: ChainId, identifier: string): Promise<Asset> {
     await delay(150);
     ensureInitialized();
-    const existing = assets.find((a) => a.id === identifier);
+    // Scoped to the chain: a token id is only unique within one chain, so an
+    // unscoped lookup could return another chain's record for the same id.
+    const existing = assets.find((a) => a.id === identifier && a.chain === chain);
     if (existing) return existing;
     const created = MOCK_DATA.generateAsset(rand, identifier, chain);
     assets.push(created);
@@ -193,7 +218,7 @@ export const mockApi = {
       findings: anomaly.details.map((s) => ({ level: s.level, title: s.label, body: s.detail })),
       headline: `Transaction of ${tx.asset.amount} ${tx.asset.symbol} on ${chain}`,
       dna: wallet?.dna ?? null,
-      network: await this.getNetwork(address ?? tx.from, 2)
+      network: await this.getNetwork(address ?? tx.from, 2, tx.chain)
     };
   },
   async createReport(chain: ChainId, hash: string, address?: string): Promise<Report> {

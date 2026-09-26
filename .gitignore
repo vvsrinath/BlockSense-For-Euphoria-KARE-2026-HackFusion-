@@ -41,3 +41,6 @@ coverage
 # kept outside the repository, and is deliberately never committed — same as the
 # logo source. `DeveloperCard` falls back to initials when the file is absent.
 apps/web/public/developer.jpg
+
+# Local Netlify folder
+.netlify

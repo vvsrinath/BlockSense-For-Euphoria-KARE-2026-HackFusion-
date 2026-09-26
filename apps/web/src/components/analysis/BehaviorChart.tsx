@@ -6,11 +6,13 @@ import { ErrorState, Panel, Segmented, Skeleton } from '@blocksense/ui';
 import { useSettings } from '../../stores/SettingsContext';
 import { useAsync } from '../../hooks/useAsync';
 import { cn, formatMoney, formatNumber } from '@blocksense/shared';
-import type { BehaviorMetric, BehaviorPoint, BehaviorRange } from '@blocksense/shared';
+import type { BehaviorMetric, BehaviorPoint, BehaviorRange, ChainId } from '@blocksense/shared';
 import { chartPalette } from '@blocksense/intelligence';
 
 interface BehaviorChartProps {
   address: string;
+  /** The wallet's chain. Without it the series re-detects from the address shape, which cannot tell Ethereum from BNB Chain. */
+  chain?: ChainId;
   title?: string;
   description?: string;
   className?: string;
@@ -28,11 +30,11 @@ const keys: Record<BehaviorMetric, {in: keyof BehaviorPoint;out: keyof BehaviorP
   volume: { in: 'inVolume', out: 'outVolume' }
 };
 
-export function BehaviorChart({ address, title = 'Behavior over time', description = 'Incoming vs outgoing activity', className }: BehaviorChartProps) {
+export function BehaviorChart({ address, chain, title = 'Behavior over time', description = 'Incoming vs outgoing activity', className }: BehaviorChartProps) {
   const { settings, resolvedTheme } = useSettings();
   const [range, setRange] = useState<BehaviorRange>('30D');
   const [metric, setMetric] = useState<BehaviorMetric>('frequency');
-  const { data, status, error, retry } = useAsync(() => getBehaviorSeries(address, range), `${address}:${range}`);
+  const { data, status, error, retry } = useAsync(() => getBehaviorSeries(address, range, chain), `${chain ?? ''}:${address}:${range}`);
   const palette = chartPalette[resolvedTheme];
   const k = keys[metric];
 

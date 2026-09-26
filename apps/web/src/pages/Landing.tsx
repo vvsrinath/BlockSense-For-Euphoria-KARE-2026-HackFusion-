@@ -6,7 +6,7 @@ import { chains } from '@blocksense/blockchain';
 import { features, journeySteps } from '../data/features';
 import { FEATURED_EXAMPLE_TX } from '../data/examples';
 
-const DEMO_PATH = `/analyze/tx/${FEATURED_EXAMPLE_TX.hash}`;
+const DEMO_PATH = `/analyze/tx/${FEATURED_EXAMPLE_TX.hash}?chain=${FEATURED_EXAMPLE_TX.chain}`;
 
 export function Landing() {
   return (

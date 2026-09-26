@@ -126,7 +126,10 @@ export function index(routes: { method: string; path: string }[]): unknown {
   return {
     name: 'BlockSense API',
     version: '1.0.0',
-    dataSource: 'live',
+    // Reports the mode the server actually resolved, not a hardcoded claim:
+    // a fresh checkout runs on generated data, and announcing `live` there
+    // would make the deployment look connected to a provider it never called.
+    dataSource: service.USE_MOCK ? 'mock' : 'live',
     limits: {
       cacheTtlSeconds: config.cacheTtlSeconds,
       maxGraphNodes: config.maxGraphNodes,

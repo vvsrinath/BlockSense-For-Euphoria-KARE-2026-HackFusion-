@@ -199,14 +199,15 @@ function createMockApi(): ApiClient {
     index: () => Promise.resolve({ name: 'BlockSense API', version: '1.0.0', dataSource: 'mock', limits: { cacheTtlSeconds: 60, maxGraphNodes: 25, maxGraphEdges: 50, requestTimeoutMs: 15000 }, routes: [] }),
     // The chain is forwarded rather than discarded: it is already known from
     // the URL, and generating a record on a different chain would make the page
-    // contradict the address the user clicked.
+    // contradict the address the user clicked. It also decides which cached
+    // record is returned, because one hash can be valid on two chains.
     transaction: (chain, hash) => mockApi.getTransaction(hash, chain),
     wallet: (chain, address) => mockApi.getWallet(address, chain),
-    walletHistory: (_chain, address, limit = 25) => mockApi.getWalletHistory(address, limit),
-    walletBalances: (_chain, address) => mockApi.getWalletAssets(address),
-    network: (_chain, address, depth = 2) => mockApi.getNetwork(address, depth),
+    walletHistory: (chain, address, limit = 25) => mockApi.getWalletHistory(address, limit, chain),
+    walletBalances: (chain, address) => mockApi.getWalletAssets(address, chain),
+    network: (chain, address, depth = 2) => mockApi.getNetwork(address, depth, chain),
     asset: (chain, identifier) => mockApi.getAsset(chain, identifier),
-    search: (query, _chain) => mockApi.search(query),
+    search: (query, chain) => mockApi.search(query, chain),
     analyze: (chain, hash, address) => mockApi.analyze(chain, hash, address),
     createReport: (chain, hash, address) => mockApi.createReport(chain, hash, address),
     report: (id) => mockApi.getReport(id),

@@ -54,7 +54,7 @@ export function Home() {
               <li>First interaction with receiver</li>
               <li>Connected to a high-anomaly wallet</li>
             </ul>
-            <Button to={`/analyze/tx/${FEATURED_EXAMPLE_TX.hash}`} className="mt-5 w-full" iconRight={ArrowRightIcon}>
+            <Button to={`/analyze/tx/${FEATURED_EXAMPLE_TX.hash}?chain=${FEATURED_EXAMPLE_TX.chain}`} className="mt-5 w-full" iconRight={ArrowRightIcon}>
               Open analysis
             </Button>
           </section>

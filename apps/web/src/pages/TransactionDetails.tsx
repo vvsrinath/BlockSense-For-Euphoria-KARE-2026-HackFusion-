@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { SearchXIcon } from 'lucide-react';
 import { getTransaction } from '../services/transactions';
 import { TransactionAnalysisView } from '../components/analysis/TransactionAnalysisView';
@@ -8,12 +8,20 @@ import { PageContainer } from '../components/layout/PageContainer';
 import { TRON_EXAMPLE_TX } from '../data/exampleIdentifiers';
 import { useProgressiveLoad } from '../hooks/useProgressiveLoad';
 import { detectInput } from '@blocksense/blockchain';
+import { isSupportedChain } from '@blocksense/blockchain';
+import type { ChainId } from '@blocksense/shared';
 
 const STEPS = ['Transaction found', 'Asset identified', 'Sender history loaded', 'Receiver history loaded', 'Relationship analysis', 'Behavioral analysis'];
 
 export function TransactionDetails() {
   const { hash = '' } = useParams();
-  const load = useProgressiveLoad(() => getTransaction(hash), `tx:${hash}`, STEPS.length);
+  const [params] = useSearchParams();
+  // The search box passes the chain it detected alongside the hash. Two chains
+  // share the `0x` prefix and two share the bare-64-hex shape, so without this
+  // the page re-guesses from the hash alone and can open the wrong chain.
+  const chainParam = params.get('chain') ?? undefined;
+  const chain = chainParam && isSupportedChain(chainParam) ? (chainParam as ChainId) : undefined;
+  const load = useProgressiveLoad(() => getTransaction(hash, chain), `tx:${chain ?? ''}:${hash}`, STEPS.length);
 
   if (load.status === 'loading') {
     return (

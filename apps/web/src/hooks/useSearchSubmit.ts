@@ -15,8 +15,17 @@ export function useSearchSubmit() {
   const [pending] = useState(false);
 
   const go = useCallback(
-    (type: 'wallet' | 'transaction', value: string) => {
-      navigate(type === 'wallet' ? `/wallet/${encodeURIComponent(value)}` : `/analyze/tx/${encodeURIComponent(value)}`);
+    (type: 'wallet' | 'transaction', value: string, chain: ChainFilter) => {
+      // The chain travels with the identifier. A 64-character hash is a valid
+      // TRON id and a valid Bitcoin txid, and an `0x` address is valid on both
+      // Ethereum and BNB Chain — without it the next page re-detects from the
+      // shape alone and can land on the wrong chain.
+      const suffix = chain !== 'all' && chain ? `?chain=${chain}` : '';
+      navigate(
+        type === 'wallet'
+          ? `/wallet/${encodeURIComponent(value)}${suffix}`
+          : `/analyze/tx/${encodeURIComponent(value)}${suffix}`
+      );
     },
     [navigate]
   );
@@ -53,7 +62,7 @@ export function useSearchSubmit() {
         return { tone: 'error', title: "We couldn't identify this input.", message: 'Check the address or transaction hash and try again.' };
       }
 
-      go(detection.action, value);
+      go(detection.action, value, chain);
       return null;
     },
     [go]

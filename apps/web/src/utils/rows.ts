@@ -20,7 +20,9 @@ export interface TransactionRow {
 export function rowFromTransaction(tx: Transaction): TransactionRow {
   return {
     id: tx.hash,
-    to: `/analyze/tx/${tx.hash}`,
+    // Carried in the URL so reopening never re-guesses the chain from the
+    // hash shape, which is ambiguous across four of the five chains.
+    to: `/analyze/tx/${tx.hash}?chain=${tx.chain}`,
     title: transactionHeadline(tx).title,
     subtitle: `${truncateMiddle(tx.from)} → ${truncateMiddle(tx.to)}`,
     chain: tx.chain,
@@ -35,7 +37,9 @@ export function rowFromActivity(activity: WalletActivity, chain: ChainId): Trans
   const known = findTransaction(activity.hash);
   return {
     id: activity.hash,
-    to: known ? `/analyze/tx/${activity.hash}` : undefined,
+    // Always linked, and with the chain: a 64-hex activity hash is a valid
+    // TRON id and a valid Bitcoin txid, so the page has to be told which one.
+    to: `/analyze/tx/${activity.hash}?chain=${chain}`,
     title: `${activity.direction === 'out' ? 'Sent' : 'Received'} ${formatAmount(activity.amount, activity.symbol)}`,
     subtitle: `${activity.direction === 'out' ? 'To' : 'From'} ${truncateMiddle(activity.counterparty)}`,
     chain,

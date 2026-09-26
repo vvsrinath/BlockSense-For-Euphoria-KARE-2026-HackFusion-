@@ -11,7 +11,7 @@ const PAGE_SIZE = 8;
 
 export function WalletActivity({ wallet }: {wallet: Wallet;}) {
   const [page, setPage] = useState(0);
-  const { data, status, error, retry } = useAsync(() => getWalletActivity(wallet.address, page, PAGE_SIZE), `${wallet.address}:${page}`);
+  const { data, status, error, retry } = useAsync(() => getWalletActivity(wallet.address, page, PAGE_SIZE, wallet.chain), `${wallet.chain}:${wallet.address}:${page}`);
 
   return (
     <Panel title="Recent activity" description="Most recent transactions first. Older rows are sample history.">

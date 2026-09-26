@@ -122,7 +122,7 @@ export function SearchBox({ size = 'md', placeholder = 'Search transaction hash,
 
           <div className="px-1 py-1">
                 <Link
-              to={`/analyze/tx/${TRON_EXAMPLE_TX}`}
+              to={`/analyze/tx/${TRON_EXAMPLE_TX}?chain=tron`}
               onClick={close}
               className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-ink hover:bg-subtle">
               

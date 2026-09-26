@@ -75,34 +75,58 @@ export function PWAInstall({ className }: PWAInstallProps) {
   );
 }
 
+/**
+ * Offers a reload once a new service worker has taken over.
+ *
+ * The worker installs with `skipWaiting`, so it claims the page as soon as it
+ * is ready and `controllerchange` fires. Reloading from inside that handler
+ * pulls the rug out from under whatever the user was doing, so the change is
+ * surfaced as a choice instead.
+ */
 export function PWAUpdateBanner() {
-  const [visible] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener?.('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-    return () => {};
+    if (!('serviceWorker' in navigator)) return;
+    // Only relevant after the first worker is already in control; the very
+    // first `controllerchange` is activation, not an update.
+    if (!navigator.serviceWorker.controller) return;
+
+    const onChange = () => setVisible(true);
+    navigator.serviceWorker.addEventListener('controllerchange', onChange);
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', onChange);
   }, []);
 
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-line bg-surface px-5 py-3 shadow-card flex items-center gap-3">
-      <span className="text-sm font-medium text-ink">A new version is ready</span>
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-sm items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 shadow-pop sm:inset-x-auto sm:right-6 sm:w-auto"
+    >
+      <RefreshCwIcon className={cn('h-4 w-4 shrink-0 text-primary', reloading && 'animate-spin')} aria-hidden="true" />
+      <span className="flex-1 text-sm font-medium text-ink">A new version is ready</span>
       <Button
         size="sm"
         variant="primary"
-        icon={RefreshCwIcon}
-        onClick={() => window.location.reload()}
+        onClick={() => {
+          setReloading(true);
+          window.location.reload();
+        }}
         className="h-8"
       >
-        Update
+        {reloading ? 'Updating…' : 'Update'}
       </Button>
+      <button
+        type="button"
+        onClick={() => setVisible(false)}
+        aria-label="Dismiss update notice"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-ink"
+      >
+        <XIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { NetworkIcon, SearchXIcon, WalletIcon } from 'lucide-react';
 import { listKnownWallets, getWallet } from '../services/wallets';
 import { BehaviorChart } from '../components/analysis/BehaviorChart';
@@ -13,10 +13,10 @@ import { WalletSummary } from '../components/wallet/WalletSummary';
 import { WatchButton } from '../components/watchlist/WatchButton';
 import { useAsync } from '../hooks/useAsync';
 import { useProgressiveLoad } from '../hooks/useProgressiveLoad';
-import { getChain, detectInput } from '@blocksense/blockchain';
+import { getChain, detectInput, isSupportedChain } from '@blocksense/blockchain';
 
 import { truncateMiddle } from '@blocksense/shared';
-import type { Wallet } from '@blocksense/shared';
+import type { ChainId, Wallet } from '@blocksense/shared';
 
 const STEPS = ['Wallet found', 'Transaction history loaded', 'Behavior profile built', 'Relationships mapped'];
 
@@ -35,7 +35,7 @@ function ExampleWallets({ wallets }: { wallets: Wallet[] }) {
       map((w) =>
       <Link
         key={w.address}
-        to={`/wallet/${w.address}`}
+        to={`/wallet/${w.address}?chain=${w.chain}`}
         className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] text-ink hover:border-primary/40 hover:bg-primary/[0.06]">
         
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getChain(w.chain).color }} aria-hidden="true" />
@@ -46,8 +46,8 @@ function ExampleWallets({ wallets }: { wallets: Wallet[] }) {
 
 }
 
-function WalletView({ address }: {address: string;}) {
-  const load = useProgressiveLoad(() => getWallet(address), `wallet:${address}`, STEPS.length);
+function WalletView({ address, chain }: { address: string; chain?: ChainId }) {
+  const load = useProgressiveLoad(() => getWallet(address, chain), `wallet:${chain ?? ''}:${address}`, STEPS.length);
 
   if (load.status === 'loading') return <LoadingState title="Analyzing wallet…" steps={STEPS} current={load.step} />;
   if (load.status === 'error') return <ErrorState error={load.error} onRetry={load.retry} />;
@@ -79,7 +79,7 @@ function WalletView({ address }: {address: string;}) {
         actions={
         <>
             <WatchButton kind="wallet" value={wallet.address} chain={wallet.chain} status={wallet.status} label={wallet.label} />
-            <Button to={`/network?address=${encodeURIComponent(wallet.address)}`} icon={NetworkIcon}>
+            <Button to={`/network?address=${encodeURIComponent(wallet.address)}&chain=${wallet.chain}`} icon={NetworkIcon}>
               View network
             </Button>
           </>
@@ -88,7 +88,7 @@ function WalletView({ address }: {address: string;}) {
       <div className="space-y-4 lg:space-y-6">
         <WalletSummary wallet={wallet} />
         <BehaviorDNA wallet={wallet} />
-        <BehaviorChart address={wallet.address} description="Incoming vs outgoing activity for this wallet" />
+        <BehaviorChart address={wallet.address} chain={wallet.chain} description="Incoming vs outgoing activity for this wallet" />
         <WalletActivity wallet={wallet} />
       </div>
     </>);
@@ -97,11 +97,17 @@ function WalletView({ address }: {address: string;}) {
 
 export function WalletAnalysis() {
   const { address } = useParams();
+  const [params] = useSearchParams();
+  // The chain travels in the query string because an `0x` address is valid on
+  // both Ethereum and BNB Chain — shape detection alone picks Ethereum every
+  // time, so a BNB wallet would be profiled against the wrong chain.
+  const chainParam = params.get('chain') ?? undefined;
+  const chain = chainParam && isSupportedChain(chainParam) ? (chainParam as ChainId) : undefined;
 
   return (
     <PageContainer>
       {address ?
-      <WalletView key={address} address={address} /> :
+      <WalletView key={`${chain ?? ''}:${address}`} address={address} chain={chain} /> :
 
       <>
           <PageHeader title="Wallet analysis" description="Understand how a wallet usually behaves — and what has changed." />
