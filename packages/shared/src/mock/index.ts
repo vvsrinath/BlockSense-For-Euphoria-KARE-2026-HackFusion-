@@ -15,7 +15,20 @@ import type {
   SignalKind,
   SignalLevel
 } from '../types';
-import { fakeHash, fakeAddress } from '../utils/seed';
+import { fakeHash, fakeAddress, createRandom, hashString } from '../utils/seed';
+
+/**
+ * A reproducible generator for a named record.
+ *
+ * Demo data is generated on the fly for whatever identifier a visitor pastes,
+ * so an unseeded generator shows a different wallet on every reload — the same
+ * address would report a different name, balance and history each time it is
+ * opened. Seeding on the identifier means every visitor, and every reload,
+ * sees the same record for the same input.
+ */
+export function seededRand(key: string): () => number {
+  return createRandom(hashString(key));
+}
 
 /**
  * Deterministic-shape demo data.
@@ -82,8 +95,33 @@ const ASSETS_BY_CHAIN: Record<ChainId, AssetDef[]> = {
   ]
 };
 
-const NAMES = ['Vitalik', 'Changpeng', 'Justin', 'Sam', 'Michael', 'Sarah', 'Alex', 'Wei', 'Phoenix', 'Nexus'];
+/**
+ * Neutral wallet archetypes rather than real people's names. Attributing
+ * fabricated transactions to recognisable individuals implies activity that
+ * never happened, which is exactly the sort of detail that undermines a demo.
+ */
+const NAMES = ['Exchange Hot Wallet', 'DeFi Whale', 'NFT Collector', 'Bridge Contract', 'Mining Pool', 'Market Maker', 'Early Adopter', 'Validator Node', 'Project Treasury', 'Payments Hub'];
 const DESCRIPTIONS = ['early adopter', 'exchange hot wallet', 'DeFi whale', 'NFT collector', 'mining pool', 'bridge contract'];
+
+const DAY = 24 * 60 * 60 * 1000;
+
+type TraitId = 'amount' | 'frequency' | 'hours' | 'asset';
+
+/**
+ * One meter per row, each measured from the activity the same page displays.
+ * The labels are fixed so a wallet can never show the same label twice with
+ * two different verdicts under it.
+ */
+const TRAIT_TEMPLATES: { id: TraitId; label: string }[] = [
+  { id: 'amount', label: 'Typical Amount' },
+  { id: 'frequency', label: 'Typical Frequency' },
+  { id: 'hours', label: 'Most Active Time' },
+  { id: 'asset', label: 'Common Asset' }
+];
+
+function padHour(hour: number): string {
+  return String(hour).padStart(2, '0');
+}
 
 function pick<T>(arr: T[], rand: () => number): T {
   return arr[Math.floor(rand() * arr.length)];
@@ -94,8 +132,13 @@ function randomInt(rand: () => number, min: number, max: number): number {
 }
 
 function randomTimestamp(rand: () => number): number {
+  // Anchored to the top of the current hour rather than to `Date.now()`. Two
+  // calls a second apart used to differ by a second, which made the same
+  // address look like a different wallet on every reload.
+  const HOUR = 60 * 60 * 1000;
+  const anchor = Math.floor(Date.now() / HOUR) * HOUR;
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-  return Date.now() - Math.floor(rand() * thirtyDays);
+  return anchor - Math.floor(rand() * thirtyDays);
 }
 
 /** Anomalies are weighted towards `normal` so a demo list is not all alarms. */
@@ -111,6 +154,40 @@ function scoreForLevel(rand: () => number, level: AnomalyLevel): number {
     case 'elevated': return randomInt(rand, 60, 79);
     case 'high': return randomInt(rand, 80, 100);
   }
+}
+
+/**
+ * The note under the status badge.
+ *
+ * The level and the score come from the same anomaly, so the wording has to
+ * agree with the badge next to it: "normal" cannot read as "this behavior
+ * differs from history".
+ */
+function statusNoteFor(level: AnomalyLevel, score: number): string {
+  const headline: Record<AnomalyLevel, string> = {
+    normal: "Behavior matches this wallet's observed history",
+    unusual: 'Observed behavior differs from historical activity',
+    elevated: 'Observed behavior differs clearly from historical activity',
+    high: 'Observed behavior differs sharply from historical activity'
+  };
+  return `${headline[level]}. Score: ${score}/100`;
+}
+
+/**
+ * The words shown next to a behavior meter. The value drives the descriptor,
+ * so a low score can never be labelled "stable" — which is what happened when
+ * both were drawn independently.
+ */
+function descriptorFor(value: number): string {
+  if (value >= 75) return 'stable';
+  if (value >= 55) return 'consistent';
+  if (value >= 35) return 'mixed';
+  if (value >= 18) return 'volatile';
+  return 'very volatile';
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 const SIGNAL_DETAILS: Record<SignalKind, string> = {
@@ -229,45 +306,130 @@ export function generateWallet(rand: () => number, addressOverride?: string, cha
   const address = addressOverride ?? fakeAddress(rand, chain);
   const anomaly = randomAnomaly(rand);
 
+  // The activity list is built first because everything the wallet page shows
+  // alongside it — frequency, active hours, asset mix, totals — is derived from
+  // those rows. Generating each figure independently is what made the header
+  // claim 2,633 transactions while the chart under it counted nine.
+  const activity = Array.from({ length: randomInt(rand, 14, 30) }, () => ({
+    hash: fakeHash(rand, chain),
+    direction: pick(['in', 'out'] as const, rand),
+    counterparty: fakeAddress(rand, chain),
+    symbol: assetsFor(chain, rand).symbol,
+    amount: (rand() * 1000).toFixed(2),
+    valueUsd: Math.round(rand() * 10000 * 100) / 100,
+    timestamp: randomTimestamp(rand),
+    level: randomLevel(rand)
+  }));
+  // The panel caption promises most recent first, so the rows are sorted to
+  // match rather than left in generation order.
+  activity.sort((a, b) => b.timestamp - a.timestamp);
+
+  const newest = activity[0].timestamp;
+  const oldest = activity[activity.length - 1].timestamp;
+  const spanDays = Math.max(1, Math.round((newest - oldest) / DAY) + 1);
+  const activityCount = activity.length;
+
+  const values = activity.map((a) => a.valueUsd).sort((a, b) => a - b);
+  const quantile = (q: number) => values[Math.min(values.length - 1, Math.floor(values.length * q))];
+  const p25 = quantile(0.25);
+  const p75 = quantile(0.75);
+  const p50 = quantile(0.5);
+
+  // Active hours: the middle half of the rows, so the range can never run
+  // backwards the way an independently drawn start and end hour did.
+  const hours = activity.map((a) => new Date(a.timestamp).getUTCHours()).sort((a, b) => a - b);
+  const hourA = hours[Math.floor(hours.length * 0.25)];
+  const hourB = hours[Math.floor(hours.length * 0.75)];
+  const startHour = Math.min(hourA, hourB);
+  const endHour = Math.max(hourA, hourB);
+
+  // Asset mix: the asset that actually appears most often in the rows above.
+  const assetCounts = new Map<string, number>();
+  for (const row of activity) assetCounts.set(row.symbol, (assetCounts.get(row.symbol) ?? 0) + 1);
+  const [topSymbol, topCount] = [...assetCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const assetShare = Math.round((topCount / activityCount) * 100);
+
+  // Day-by-day uniformity of the rows, used for the frequency meter.
+  const perDay = new Map<number, number>();
+  for (const row of activity) {
+    const day = Math.floor(row.timestamp / DAY);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+  }
+  const meanPerDay = activityCount / spanDays;
+  const variance = [...perDay.values()].reduce((acc, count) => acc + (count - meanPerDay) ** 2, 0) / spanDays;
+  const cv = meanPerDay > 0 ? Math.sqrt(variance) / meanPerDay : 1;
+
+  const amountStability = clampPercent(100 - ((p75 - p25) / Math.max(1, p75)) * 100);
+  const frequencyStability = clampPercent(100 - cv * 100);
+  const hourStability = clampPercent(100 - ((endHour - startHour) / 24) * 100);
+
+  // Lifetime figures, scaled from the same rows so the header, the chart and
+  // the DNA panel all describe one history.
+  const txPerWeek = Math.max(1, Math.round(activityCount / Math.max(1, spanDays / 7)));
+  const activeDays = Math.max(spanDays, randomInt(rand, 60, 730));
+  const txCount = Math.max(activityCount, Math.round(txPerWeek * (activeDays / 7)));
+  const lifetimeRatio = txCount / activityCount;
+  const totalIn = activity.filter((a) => a.direction === 'in').reduce((sum, a) => sum + a.valueUsd, 0);
+  const totalOut = activity.filter((a) => a.direction === 'out').reduce((sum, a) => sum + a.valueUsd, 0);
+  const counterparties = new Set(activity.map((a) => a.counterparty)).size;
+  const lastActive = newest;
+  const firstSeen = lastActive - activeDays * DAY;
+
+  // One trait per meter, drawn without replacement. Picking labels
+  // independently produced the same label twice with contradictory words
+  // underneath it.
+  const templates = [...TRAIT_TEMPLATES];
+  for (let i = templates.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [templates[i], templates[j]] = [templates[j], templates[i]];
+  }
+  const traitCount = randomInt(rand, 3, templates.length);
+  const traitValues: Record<TraitId, number> = {
+    amount: amountStability,
+    frequency: frequencyStability,
+    hours: hourStability,
+    asset: assetShare
+  };
+  const traitDescriptions: Record<TraitId, (descriptor: string) => string> = {
+    amount: (d) => `${d} transfer sizes across ${activityCount} recent transactions`,
+    frequency: (d) => `${d} transfer frequency across the last ${spanDays} days`,
+    hours: (d) => `${d} activity between ${padHour(startHour)}:00 and ${padHour(endHour)}:00 UTC`,
+    asset: () => `${topSymbol} in ${assetShare}% of recent transfers`
+  };
+  const traits = templates.slice(0, traitCount).map((template) => {
+    const value = traitValues[template.id];
+    const descriptor = descriptorFor(value);
+    return { label: template.label, value, descriptor, description: traitDescriptions[template.id](descriptor) };
+  });
+
   return {
     address,
     chain,
-    label: `${pick(NAMES, rand)} Wallet`,
+    // `NAMES` entries are complete labels, so no suffix is appended here.
+    label: pick(NAMES, rand),
     tags: [pick(DESCRIPTIONS, rand)],
-    firstSeen: randomTimestamp(rand) - randomInt(rand, 30, 730) * 24 * 60 * 60 * 1000,
-    lastActive: randomTimestamp(rand),
-    txCount: randomInt(rand, 50, 5000),
-    totalInUsd: Math.round(rand() * 5000000 * 100) / 100,
-    totalOutUsd: Math.round(rand() * 5000000 * 100) / 100,
+    firstSeen,
+    lastActive,
+    txCount,
+    totalInUsd: Math.round(totalIn * lifetimeRatio * 100) / 100,
+    totalOutUsd: Math.round(totalOut * lifetimeRatio * 100) / 100,
     // Status and its note come from one anomaly so the score shown in the note
     // always matches the level in the badge.
     status: anomaly.level,
-    statusNote: `Observed behavior differs from historical activity. Score: ${anomaly.score}/100`,
+    statusNote: statusNoteFor(anomaly.level, anomaly.score),
     spike: rand() > 0.7,
     dna: {
-      typicalAmount: `$${randomInt(rand, 10, 5000)} - $${randomInt(rand, 5000, 50000)}`,
-      typicalFrequency: `${randomInt(rand, 1, 20)} transactions/week`,
-      mostActive: `${randomInt(rand, 0, 23)}:00 - ${randomInt(rand, 0, 23)}:00 UTC`,
-      commonAsset: assetsFor(chain, rand).symbol,
-      counterparties: randomInt(rand, 5, 100),
-      medianUsd: Math.round(rand() * 5000 * 100) / 100,
-      txPerWeek: randomInt(rand, 1, 50),
-      traits: Array.from({ length: randomInt(rand, 3, 6) }, () => {
-        const descriptor = pick(['stable', 'volatile', 'periodic', 'consistent'], rand);
-        const label = pick(['Typical Amount', 'Typical Frequency', 'Most Active Time', 'Common Asset'], rand);
-        return { label, value: rand() * 100, descriptor, description: `${descriptor} behavior pattern` };
-      })
+      typicalAmount: `$${Math.round(p25)} - $${Math.round(Math.max(p75, p25 + 1))}`,
+      // Same number the behavior chart totals for the same rows.
+      typicalFrequency: `${txPerWeek} transactions/week`,
+      mostActive: `${padHour(startHour)}:00 - ${padHour(endHour)}:00 UTC`,
+      commonAsset: topSymbol,
+      counterparties,
+      medianUsd: Math.round(p50 * 100) / 100,
+      txPerWeek,
+      traits
     },
-    activity: Array.from({ length: randomInt(rand, 10, 30) }, () => ({
-      hash: fakeHash(rand, chain),
-      direction: pick(['in', 'out'] as const, rand),
-      counterparty: fakeAddress(rand, chain),
-      symbol: assetsFor(chain, rand).symbol,
-      amount: (rand() * 1000).toFixed(2),
-      valueUsd: Math.round(rand() * 10000 * 100) / 100,
-      timestamp: randomTimestamp(rand),
-      level: randomLevel(rand)
-    }))
+    activity
   };
 }
 
@@ -370,20 +532,24 @@ export function generateReport(rand: () => number, hash: string, chain: ChainId 
     assetLabel: assetSymbol,
     score: anomaly.score,
     level: anomaly.level,
-    createdAt: Date.now(),
+    // Anchored to the hour so a reloaded report list does not re-timestamp
+    // every entry by a few milliseconds.
+    createdAt: Math.floor(Date.now() / (60 * 60 * 1000)) * (60 * 60 * 1000),
     findings: anomaly.details.map((s) => s.detail),
     sections
   };
 }
 
 export function generateMultipleTransactions(count: number, chain?: ChainId): Transaction[] {
-  const r = () => Math.random();
-  return Array.from({ length: count }, () => generateTransaction(r, undefined, chain));
+  // Seeded per entry so a list is identical on every load; an unseeded list
+  // re-randomised itself on each reload.
+  return Array.from({ length: count }, (_, i) =>
+    generateTransaction(seededRand(`tx-list:${chain ?? 'any'}:${i}`), undefined, chain));
 }
 
 export function generateMultipleWallets(count: number, chain?: ChainId): Wallet[] {
-  const r = () => Math.random();
-  return Array.from({ length: count }, () => generateWallet(r, undefined, chain));
+  return Array.from({ length: count }, (_, i) =>
+    generateWallet(seededRand(`wallet-list:${chain ?? 'any'}:${i}`), undefined, chain));
 }
 
 export const MOCK_DATA = {

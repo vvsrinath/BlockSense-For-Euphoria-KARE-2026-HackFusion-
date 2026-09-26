@@ -9,7 +9,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { useSearchSubmit, type SearchFeedback } from '../../hooks/useSearchSubmit';
 import { cn, truncateMiddle } from '@blocksense/shared';
 import type { ChainFilter } from '@blocksense/shared';
-import { detectInput } from '@blocksense/blockchain';
+import { detectInput, getChain } from '@blocksense/blockchain';
 
 interface SearchBoxProps {
   size?: 'md' | 'lg';
@@ -35,9 +35,9 @@ export function SearchBox({ size = 'md', placeholder = 'Search transaction hash,
   const detection = useMemo(() => trimmed ? detectInput(trimmed, chain) : null, [trimmed, chain]);
   const lg = size === 'lg';
 
-  const handleSubmit = async (e?: FormEvent) => {
+  const handleSubmit = async (e?: FormEvent, chainOverride?: ChainFilter) => {
     e?.preventDefault();
-    const result = await submit(value, chain);
+    const result = await submit(value, chainOverride ?? chain);
     setFeedback(result);
     setFocused(true);
     if (!result) {
@@ -118,7 +118,13 @@ export function SearchBox({ size = 'md', placeholder = 'Search transaction hash,
                 </div>
               </div> :
           detection ?
-          <DetectionRow detection={detection} value={trimmed} onSubmit={() => handleSubmit()} /> :
+          <DetectionRow
+            detection={detection}
+            value={trimmed}
+            chain={chain}
+            onSubmit={() => handleSubmit()}
+            onPickChain={(picked) => handleSubmit(undefined, picked)}
+          /> :
 
           <div className="px-1 py-1">
                 <Link
@@ -150,10 +156,20 @@ export function SearchBox({ size = 'md', placeholder = 'Search transaction hash,
 interface DetectionRowProps {
   detection: ReturnType<typeof detectInput>;
   value: string;
+  chain: ChainFilter;
   onSubmit: () => void;
+  onPickChain: (chain: ChainFilter) => void;
 }
 
-function DetectionRow({ detection, value, onSubmit }: DetectionRowProps) {
+/**
+ * The live "what did you paste?" suggestion.
+ *
+ * When the value is valid on more than one chain and no chain filter is set,
+ * the alternatives are offered as buttons rather than silently dropped: a bare
+ * 64-character hash is equally a Bitcoin txid and a TRON id, and picking one
+ * for the visitor is how the wrong record gets opened.
+ */
+function DetectionRow({ detection, value, chain, onSubmit, onPickChain }: DetectionRowProps) {
   if (detection.kind === 'unknown') {
     if (value.length < 6) return <p className="px-3 py-2.5 text-[13px] text-muted">Keep typing — paste a full address or transaction hash.</p>;
     return (
@@ -176,20 +192,39 @@ function DetectionRow({ detection, value, onSubmit }: DetectionRowProps) {
   detection.kind === 'shortened' ?
   "We'll look for a match in the demo data." :
   truncateMiddle(value, 10, 8);
+  const ambiguous = detection.chains.length > 1 && (!chain || chain === 'all');
 
   return (
-    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onSubmit} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-subtle">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-        <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-ink">{detection.label}</span>
-        <span className={cn('block truncate text-xs text-muted', detection.kind !== 'block' && detection.kind !== 'shortened' && 'font-mono')}>{sub}</span>
-      </span>
-      <span className="hidden items-center gap-1 whitespace-nowrap text-[13px] font-medium text-primary sm:inline-flex">
-        {actionLabel}
-        <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
-      </span>
-    </button>);
+    <div>
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onSubmit} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-subtle">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-ink">{detection.label}</span>
+          <span className={cn('block truncate text-xs text-muted', detection.kind !== 'block' && detection.kind !== 'shortened' && 'font-mono')}>{sub}</span>
+        </span>
+        <span className="hidden items-center gap-1 whitespace-nowrap text-[13px] font-medium text-primary sm:inline-flex">
+          {actionLabel}
+          <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+      </button>
+
+      {ambiguous ? (
+        <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2 pt-1">
+          <span className="text-xs text-muted">Also valid on:</span>
+          {detection.chains.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPickChain(candidate)}
+              className="rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+              {getChain(candidate).name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>);
 
 }

@@ -45,7 +45,7 @@ export function PublicHeader() {
 
         <div className="ml-auto hidden items-center gap-2 lg:flex">
           {publicNavSecondary.map((item) => (
-            <Button key={item.to} to={item.to} variant={item.label === 'Sign in' ? 'primary' : 'ghost'} size="sm">
+            <Button key={item.to} to={item.to} variant={item.label === 'Open app' ? 'primary' : 'ghost'} size="sm">
               {item.label}
             </Button>
           ))}
@@ -82,7 +82,7 @@ export function PublicHeader() {
           </ul>
           <div className="mt-3 flex gap-2 border-t border-line pt-3">
             {publicNavSecondary.map((item) => (
-              <Button key={item.to} to={item.to} variant={item.label === 'Sign in' ? 'primary' : 'secondary'} size="sm" className="flex-1">
+              <Button key={item.to} to={item.to} variant={item.label === 'Open app' ? 'primary' : 'secondary'} size="sm" className="flex-1">
                 {item.label}
               </Button>
             ))}

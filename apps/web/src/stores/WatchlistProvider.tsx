@@ -1,17 +1,8 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WatchItem } from '@blocksense/shared';
+import { WatchlistContext } from './WatchlistContext';
 
 const STORAGE_KEY = 'blocksense.watchlist';
-
-interface WatchlistContextValue {
-  items: WatchItem[];
-  add: (item: Omit<WatchItem, 'id' | 'addedAt'>) => void;
-  remove: (id: string) => void;
-  find: (value: string) => WatchItem | undefined;
-  toggle: (item: Omit<WatchItem, 'id' | 'addedAt'>) => boolean;
-}
-
-const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 
 function readItems(): WatchItem[] {
   try {
@@ -56,10 +47,4 @@ export function WatchlistProvider({ children }: {children: React.ReactNode;}) {
 
   const value = useMemo(() => ({ items, add, remove, find, toggle }), [items, add, remove, find, toggle]);
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;
-}
-
-export function useWatchlist(): WatchlistContextValue {
-  const ctx = useContext(WatchlistContext);
-  if (!ctx) throw new Error('useWatchlist must be used within WatchlistProvider');
-  return ctx;
 }

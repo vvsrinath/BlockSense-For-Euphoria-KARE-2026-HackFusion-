@@ -21,7 +21,7 @@ import { analyzeTransaction, buildGraph } from '@blocksense/intelligence';
 import type { AnalysisResult } from '@blocksense/intelligence';
 import { config, requestPolicy } from '../config/index';
 import { TtlCache, cacheKey } from '../middleware/cache';
-import { MOCK_DATA } from '@blocksense/shared';
+import { MOCK_DATA, seededRand } from '@blocksense/shared';
 
 /** Shared across adapters so a second identical request costs nothing. */
 const cache = new TtlCache({ ttlMs: config.cacheTtlSeconds * 1000, maxEntries: 500 });
@@ -70,7 +70,9 @@ export function adapterFor(chain: ChainId): BlockchainAdapter {
 /** Create mock adapters that return auto-generated demo data. */
 function createMockAdapter(chain: ChainId): BlockchainAdapter {
   const chainInfo = getChain(chain);
-  const r = () => Math.random();
+  // Seeded on the chain and the identifier: the demo API has to answer with
+  // the same record for the same request on every call, not a new one each time.
+  const seed = (key: string) => seededRand(`${chain}:${key}`);
 
   // Caches are per adapter rather than module-wide: the same 32-byte string can
   // be a Bitcoin txid and a TRON hash, and a shared cache would hand one chain's
@@ -88,41 +90,45 @@ function createMockAdapter(chain: ChainId): BlockchainAdapter {
       if (cached) return cached;
       // Generated on this adapter's chain so the `:chain` in the URL and the
       // returned record always agree.
-      const tx = MOCK_DATA.generateTransaction(r, hash, chain);
+      const tx = MOCK_DATA.generateTransaction(seed(`tx:${hash}`), hash, chain);
       txCache.set(hash, tx);
       return tx;
     },
     async getWallet(address: string) {
       const cached = walletCache.get(address);
       if (cached) return cached;
-      const wallet = MOCK_DATA.generateWallet(r, address, chain);
+      const wallet = MOCK_DATA.generateWallet(seed(`wallet:${address}`), address, chain);
       walletCache.set(address, wallet);
       return wallet;
     },
-    async getBalances(_address: string) {
+    async getBalances(address: string) {
       // Balances come from the chain's own asset list, so a Bitcoin wallet never
       // reports a BEP-20 token holding.
-      return MOCK_DATA.generateAssetsForChain(r, chain).map((asset) => ({
+      const rand = seed(`balances:${address}`);
+      return MOCK_DATA.generateAssetsForChain(rand, chain).map((asset) => ({
         assetId: asset.id,
         symbol: asset.symbol,
-        amount: Math.random() * 1000,
+        amount: rand() * 1000,
         decimals: asset.decimals ?? 18,
-        valueUsd: Math.round(Math.random() * 5000 * 100) / 100
+        valueUsd: Math.round(rand() * 5000 * 100) / 100
       }));
     },
-    async getHistory(_address: string, options?: HistoryOptions) {
+    async getHistory(address: string, options?: HistoryOptions) {
       const limit = options?.limit ?? 25;
-      return Array.from({ length: limit }, () => MOCK_DATA.generateTransaction(r, undefined, chain));
+      // Seeded per row so the same address returns the same history. The rows
+      // are transactions *from* that wallet's history, keyed on it.
+      return Array.from({ length: limit }, (_, i) =>
+        MOCK_DATA.generateTransaction(seed(`history:${address}:${i}`), undefined, chain));
     },
     async getAsset(identifier: string) {
-      return MOCK_DATA.generateAsset(r, identifier, chain);
+      return MOCK_DATA.generateAsset(seed(`asset:${identifier}`), identifier, chain);
     },
     async getTip() {
       // Heights drift from the chain's real head rather than being drawn from a
       // flat range, which would put Bitcoin above Solana's slot count.
       return {
         chain,
-        height: chainInfo.latestHeight + Math.floor(Math.random() * 1000),
+        height: chainInfo.latestHeight + Math.floor(seed('tip')() * 1000),
         unit: chainInfo.latestLabel === 'Latest slot' ? ('slot' as const) : ('block' as const)
       };
     },

@@ -21,6 +21,9 @@
   # Matches the version this project declares in package.json engines and the
   # one the test suite runs on.
   NODE_VERSION = "20"
+  # The API reports its mode from NODE_ENV and otherwise answers "development"
+  # in production, which is what the health endpoint used to say.
+  NODE_ENV = "production"
   # The function imports an already-bundled, self-contained file, so there is
   # nothing left for Netlify's bundler to resolve. esbuild still needs to run.
   NODE_BUNDLER = "esbuild"

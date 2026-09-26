@@ -59,7 +59,10 @@ describe('netlify.toml lives only at the repository root', () => {
     const found: string[] = [];
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+        // `.netlify` is the Netlify CLI's own cache — a deploy writes a copy of
+        // the site config there, so it has to be skipped or every deploy makes
+        // this test fail for a file the repository never contains.
+        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.netlify') continue;
         const full = resolve(dir, entry.name);
         if (entry.isDirectory()) walk(full);
         else if (entry.name === 'netlify.toml' && full !== resolve(repo, 'netlify.toml')) found.push(full);

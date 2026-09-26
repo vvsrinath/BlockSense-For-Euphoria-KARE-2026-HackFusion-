@@ -13,7 +13,8 @@
     "apps/web/src/**/*.tsx",
     "apps/api/src/**/*.ts",
     "scripts/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
   ],
   "exclude": ["node_modules", "**/dist", "**/node_modules"]
 }

@@ -1,4 +1,4 @@
-import { MOCK_DATA } from '@blocksense/shared';
+import { MOCK_DATA, createRandom, hashString, seededRand } from '@blocksense/shared';
 import { detectInput, getChain } from '@blocksense/blockchain';
 import type { ChainId, Transaction, Wallet, Asset, NetworkGraphData, Report } from '@blocksense/shared';
 import type {
@@ -19,24 +19,33 @@ let assets: Asset[] = [];
 let reports: Report[] = [];
 let initialized = false;
 
-function rand(): number {
-  return Math.random();
+/**
+ * The chain an identifier belongs to when the caller does not say.
+ *
+ * Resolving it here rather than letting each call decide independently is what
+ * keeps one address attached to one wallet: a lookup without a hint and the
+ * same lookup with a hint have to land on the same record.
+ */
+function resolveChain(value: string, chain?: ChainId): ChainId {
+  if (chain && CHAINS.includes(chain)) return chain;
+  return detectInput(value, 'all').chains[0] ?? 'ethereum';
+}
+
+/** Latency only — deliberately not seeded, so delays stay irregular. */
+function delay(ms = 200): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms + Math.random() * 300));
 }
 
 function ensureInitialized(): void {
   if (initialized) return;
   transactions = MOCK_DATA.generateMultipleTransactions(20);
   wallets = MOCK_DATA.generateMultipleWallets(10);
-  assets = CHAINS.flatMap((chain) => MOCK_DATA.generateAssetsForChain(rand, chain));
-  reports = Array.from({ length: 5 }, () => {
-    const tx = transactions[Math.floor(rand() * transactions.length)];
-    return MOCK_DATA.generateReport(rand, tx.hash, tx.chain);
+  assets = CHAINS.flatMap((chain) => MOCK_DATA.generateAssetsForChain(createRandom(hashString(`assets:${chain}`)), chain));
+  reports = Array.from({ length: 5 }, (_, i) => {
+    const tx = transactions[i % transactions.length];
+    return MOCK_DATA.generateReport(seededRand(`report:${i}:${tx.hash}`), tx.hash, tx.chain);
   });
   initialized = true;
-}
-
-function delay(ms = 200): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms + rand() * 300));
 }
 
 export const mockApi = {
@@ -130,20 +139,23 @@ export const mockApi = {
     // Matched on chain as well as hash: the same 64 hex characters are a valid
     // Bitcoin txid and a valid TRON id, so a hash-only lookup could hand back
     // the record generated for the other chain.
-    const existing = transactions.find((t) => t.hash === hash && (chain === undefined || t.chain === chain));
+    const resolved = resolveChain(hash, chain);
+    const existing = transactions.find((t) => t.hash === hash && t.chain === resolved);
     if (existing) return existing;
     // Generated on the requested chain so the URL a user opened and the record
-    // they land on describe the same chain.
-    const created = MOCK_DATA.generateTransaction(rand, hash, chain);
+    // they land on describe the same chain — and seeded on hash and chain so
+    // the same URL shows the same record after a reload.
+    const created = MOCK_DATA.generateTransaction(seededRand(`tx:${resolved}:${hash}`), hash, resolved);
     transactions.push(created);
     return created;
   },
   async getWallet(address: string, chain?: ChainId): Promise<Wallet> {
     await delay(200);
     ensureInitialized();
-    const existing = wallets.find((w) => w.address === address && (chain === undefined || w.chain === chain));
+    const resolved = resolveChain(address, chain);
+    const existing = wallets.find((w) => w.address === address && w.chain === resolved);
     if (existing) return existing;
-    const created = MOCK_DATA.generateWallet(rand, address, chain);
+    const created = MOCK_DATA.generateWallet(seededRand(`wallet:${resolved}:${address}`), address, resolved);
     wallets.push(created);
     return created;
   },
@@ -167,8 +179,9 @@ export const mockApi = {
       asset: { type: 'token' as const, name: a.symbol, symbol: a.symbol, amount: a.amount, valueUsd: a.valueUsd },
       fee: { amount: '0.001', symbol: getChain(wallet.chain).symbol, valueUsd: 2 },
       // Reuse the generator's anomaly shape so history rows satisfy the same
-      // `TransactionAnomaly` contract as full transaction records.
-      anomaly: MOCK_DATA.randomAnomaly(rand),
+      // `TransactionAnomaly` contract as full transaction records. Seeded on
+      // the row's hash so the score beside a row does not change on reload.
+      anomaly: MOCK_DATA.randomAnomaly(seededRand(`hist-anomaly:${a.hash}`)),
       summary: [`${a.amount} ${a.symbol} ${a.direction} to ${a.counterparty.slice(0, 6)}…`],
       technical: [{ label: 'Hash', value: a.hash }],
       related: []
@@ -180,19 +193,28 @@ export const mockApi = {
     const wallet = await this.getWallet(address, chain);
     const scoped = assets.filter((a) => a.chain === wallet.chain);
     const pool = scoped.length ? scoped : assets;
+    // Seeded on the wallet and asset so a balance is stable across reloads.
+    const balances = createRandom(hashString(`balances:${wallet.chain}:${address}`));
     return pool.slice(0, 5).map((a) => ({
       assetId: a.id,
       symbol: a.symbol,
-      amount: rand() * 1000,
+      amount: balances() * 1000,
       decimals: a.decimals ?? 18,
-      valueUsd: Math.round(rand() * 5000 * 100) / 100
+      valueUsd: Math.round(balances() * 5000 * 100) / 100
     }));
   },
   async getNetwork(address: string, depth = 2, chain?: ChainId): Promise<NetworkGraphData> {
     await delay(300);
     ensureInitialized();
     const wallet = await this.getWallet(address, chain);
-    return MOCK_DATA.generateNetworkGraph(rand, address, wallet.chain, depth);
+    // Seeded on address, chain and depth: reopening the same graph has to show
+    // the same nodes rather than a freshly drawn neighbourhood.
+    return MOCK_DATA.generateNetworkGraph(
+      seededRand(`network:${wallet.chain}:${address}:${depth}`),
+      address,
+      wallet.chain,
+      depth
+    );
   },
   async getAsset(chain: ChainId, identifier: string): Promise<Asset> {
     await delay(150);
@@ -201,7 +223,7 @@ export const mockApi = {
     // unscoped lookup could return another chain's record for the same id.
     const existing = assets.find((a) => a.id === identifier && a.chain === chain);
     if (existing) return existing;
-    const created = MOCK_DATA.generateAsset(rand, identifier, chain);
+    const created = MOCK_DATA.generateAsset(seededRand(`asset:${chain}:${identifier}`), identifier, chain);
     assets.push(created);
     return created;
   },
@@ -211,7 +233,7 @@ export const mockApi = {
     const tx = await this.getTransaction(hash, chain);
     const wallet = address ? await this.getWallet(address, chain) : null;
     // `anomaly` is optional on `Transaction`, but every generated record has one.
-    const anomaly = tx.anomaly ?? MOCK_DATA.randomAnomaly(rand);
+    const anomaly = tx.anomaly ?? MOCK_DATA.randomAnomaly(seededRand(`analyze:${chain}:${hash}`));
     return {
       transaction: tx,
       score: { score: anomaly.score, level: anomaly.level, contributing: anomaly.details },
@@ -225,7 +247,9 @@ export const mockApi = {
     await delay(300);
     ensureInitialized();
     void address;
-    const report = MOCK_DATA.generateReport(rand, hash, chain);
+    // Seeded on the hash and how many reports already exist, so a fresh report
+    // has its own id but a reloaded list still shows the same entries.
+    const report = MOCK_DATA.generateReport(seededRand(`report-new:${chain}:${hash}:${reports.length}`), hash, chain);
     reports.push(report);
     return report;
   },

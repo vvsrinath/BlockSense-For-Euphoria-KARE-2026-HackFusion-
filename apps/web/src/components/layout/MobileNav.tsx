@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { EllipsisIcon, SettingsIcon, XIcon, BoxIcon } from "lucide-react";
@@ -18,6 +18,50 @@ const moreItems = [...primaryNav.slice(4), {
 }];
 export function MobileNav() {
   const [moreOpen, setMoreOpen] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // The drawer is a dialog: it takes focus when it opens, keeps Tab inside it,
+  // closes on Escape, and hands focus back to the button that opened it.
+  // Without this a keyboard user is left focused on the page behind an overlay.
+  useEffect(() => {
+    if (!moreOpen) {
+      if (wasOpen.current) triggerRef.current?.focus();
+      wasOpen.current = false;
+      return;
+    }
+    wasOpen.current = true;
+    closeRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusables = dialogRef.current
+        ? [...dialogRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')]
+        : [];
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const inside = active ? dialogRef.current?.contains(active) : false;
+      if (event.shiftKey && (!inside || active === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [moreOpen]);
+
   return <>
       <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur md:hidden print:hidden">
         <ul className="grid grid-cols-5">
@@ -30,7 +74,7 @@ export function MobileNav() {
               </NavLink>
             </li>)}
           <li>
-            <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted">
+            <button ref={triggerRef} type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} aria-haspopup="dialog" className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted">
               <EllipsisIcon className="h-5 w-5" aria-hidden="true" />
               More
             </button>
@@ -49,7 +93,7 @@ export function MobileNav() {
         }} transition={{
           duration: 0.2
         }} onClick={() => setMoreOpen(false)} />
-            <motion.div className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface p-4 pb-8" initial={{
+            <motion.div ref={dialogRef} className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface p-4 pb-8" initial={{
           y: '100%'
         }} animate={{
           y: 0
@@ -61,7 +105,7 @@ export function MobileNav() {
         }}>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-ink">More</p>
-                <button type="button" onClick={() => setMoreOpen(false)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-subtle">
+                <button ref={closeRef} type="button" onClick={() => setMoreOpen(false)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-subtle">
                   <XIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>

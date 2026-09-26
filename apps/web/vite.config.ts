@@ -46,6 +46,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
+          // Vendor payloads that change far less often than the app itself get
+          // their own file, so a deploy re-downloads only what changed.
+          motion: ['framer-motion'],
           charts: ['recharts'],
           graph: ['@xyflow/react']
         }

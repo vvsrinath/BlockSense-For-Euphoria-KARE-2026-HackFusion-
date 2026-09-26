@@ -22,6 +22,11 @@ export default defineConfig({
     // `config/typescript/base.json`.
     alias: [
       { find: '@blocksense/shared', replacement: r('./packages/shared/src') },
+      // `react-router-dom` is a dependency of the web app only, so a test file
+      // in `tests/` cannot resolve it the way Node would. Point at the very
+      // copy the components use — otherwise the app and the test would each get
+      // their own React instance and the router would throw about hooks.
+      { find: /^react-router-dom$/, replacement: r('./apps/web/node_modules/react-router-dom') },
       { find: '@blocksense/blockchain', replacement: r('./packages/blockchain/src') },
       { find: '@blocksense/transaction-engine', replacement: r('./packages/transaction-engine/src') },
       { find: '@blocksense/intelligence', replacement: r('./packages/intelligence/src') },
@@ -30,7 +35,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     reporters: 'default',
     env: {
       // The API resolves its mode from the environment, and it now defaults to

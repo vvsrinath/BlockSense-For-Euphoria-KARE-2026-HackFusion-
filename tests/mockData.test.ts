@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MOCK_DATA, createRandom, TransactionSchema } from '@blocksense/shared';
+import { MOCK_DATA, createRandom, hashString, TransactionSchema } from '@blocksense/shared';
 import type { ChainId } from '@blocksense/shared';
 import { detectInput, chains as chainRegistry } from '@blocksense/blockchain';
 
@@ -274,6 +274,114 @@ describe('bulk generation', () => {
     }
     for (const wallet of MOCK_DATA.generateMultipleWallets(5, 'tron')) {
       expect(wallet.chain).toBe('tron');
+    }
+  });
+
+  it('is byte-identical on a repeat run', () => {
+    // A reload must not re-roll the demo lists: the same screen would show
+    // different transactions each time it is opened.
+    expect(MOCK_DATA.generateMultipleTransactions(10)).toEqual(MOCK_DATA.generateMultipleTransactions(10));
+    expect(MOCK_DATA.generateMultipleWallets(6)).toEqual(MOCK_DATA.generateMultipleWallets(6));
+  });
+});
+
+describe('wallet coherence', () => {
+  const ADDRESS = '0xAbC0000000000000000000000000000000000001';
+
+  /** The same seed pipeline the mock API uses for a pasted address. */
+  function walletFor(address = ADDRESS, chain: ChainId = 'ethereum') {
+    return MOCK_DATA.generateWallet(createRandom(hashString(`wallet:${chain}:${address}`)), address, chain);
+  }
+
+  it('returns the same record for the same address on every call', () => {
+    // The bug this guards against: a visitor reloading a wallet page saw a
+    // different name, balance and history each time.
+    expect(walletFor()).toEqual(walletFor());
+    expect(walletFor()).not.toEqual(walletFor('0xAbC0000000000000000000000000000000000002'));
+  });
+
+  it('keeps the activity sorted newest first, as the panel caption promises', () => {
+    const { activity } = walletFor();
+    for (let i = 1; i < activity.length; i++) {
+      expect(activity[i - 1].timestamp).toBeGreaterThanOrEqual(activity[i].timestamp);
+    }
+  });
+
+  it('reads the status note from the same anomaly as the badge', () => {
+    for (let i = 0; i < 40; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      if (wallet.status === 'normal') {
+        expect(wallet.statusNote).toMatch(/matches this wallet's observed history/i);
+      } else {
+        expect(wallet.statusNote).toMatch(/differs/i);
+      }
+      const score = Number(/Score:\s*(\d+)\/100/.exec(wallet.statusNote)?.[1]);
+      expect(Number.isFinite(score)).toBe(true);
+    }
+  });
+
+  it('never prints an active-hours range that runs backwards', () => {
+    for (let i = 0; i < 60; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      const range = /(\d{1,2}):00 - (\d{1,2}):00 UTC/.exec(wallet.dna.mostActive);
+      expect(range, `unparseable range: ${wallet.dna.mostActive}`).not.toBeNull();
+      const start = Number(range?.[1]);
+      const end = Number(range?.[2]);
+      expect(start).toBeLessThanOrEqual(end);
+    }
+  });
+
+  it('labels each behavior meter once, with a verdict matching its value', () => {
+    for (let i = 0; i < 40; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      const labels = wallet.dna.traits.map((t) => t.label);
+      expect(new Set(labels).size).toBe(labels.length);
+      for (const trait of wallet.dna.traits) {
+        const stable = trait.value >= 75;
+        const veryVolatile = trait.value < 18;
+        if (stable) expect(trait.descriptor).toBe('stable');
+        if (veryVolatile) expect(trait.descriptor).toBe('very volatile');
+        if (!stable && !veryVolatile) expect(trait.descriptor).not.toBe('stable');
+      }
+    }
+  });
+
+  it('states one frequency, used by both the DNA panel and the chart it sits above', () => {
+    for (let i = 0; i < 30; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      expect(wallet.dna.typicalFrequency).toBe(`${wallet.dna.txPerWeek} transactions/week`);
+      // The chart on the same page counts these rows over ~30 days, so the
+      // claimed weekly rate cannot be an order of magnitude away from them.
+      const weeks = 30 / 7;
+      expect(wallet.dna.txPerWeek).toBeLessThanOrEqual(Math.ceil(wallet.activity.length / weeks) + 1);
+    }
+  });
+
+  it('names the asset that actually dominates the history', () => {
+    for (let i = 0; i < 30; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      const counts = new Map<string, number>();
+      for (const row of wallet.activity) counts.set(row.symbol, (counts.get(row.symbol) ?? 0) + 1);
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      expect(wallet.dna.commonAsset).toBe(top);
+    }
+  });
+
+  it('counts only counterparties that appear in the history', () => {
+    const wallet = walletFor();
+    const unique = new Set(wallet.activity.map((a) => a.counterparty)).size;
+    expect(wallet.dna.counterparties).toBe(unique);
+  });
+
+  it('attributes the wallet to an archetype, not a real person', () => {
+    const realPeople = ['Vitalik', 'Changpeng', 'Justin', 'Sam', 'Bankman', 'Satoshi', 'Dorsey', 'Musk'];
+    for (let i = 0; i < 60; i++) {
+      const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
+      const label = wallet.label ?? '';
+      for (const person of realPeople) {
+        expect(label).not.toContain(person);
+      }
+      expect(label.length).toBeGreaterThan(0);
     }
   });
 });

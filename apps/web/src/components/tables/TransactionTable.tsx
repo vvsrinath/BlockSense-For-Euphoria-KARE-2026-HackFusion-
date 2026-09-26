@@ -35,7 +35,11 @@ export function TransactionTable({ rows, caption, showChain = true, pagination, 
                 {row.to ? (
                   <Link
                     to={row.to}
-                    className={cn('-mx-2 block rounded-xl px-3 py-3 transition-colors duration-150 ease-out hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:-mx-2 md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_150px] md:items-center md:gap-4')}
+                    // No negative margins here: the wrapper scrolls horizontally
+                    // when it needs to, and a `-mx-2` row made it overflow by a
+                    // rem on every screen, so a scrollbar showed under a table
+                    // that actually fit.
+                    className={cn('block rounded-xl px-3 py-3 transition-colors duration-150 ease-out hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_150px] md:items-center md:gap-4')}
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-subtle">

@@ -5,8 +5,8 @@ import { AppLoadingScreen } from './components/layout/AppLoadingScreen';
 import { ThemedToaster } from './components/layout/ThemedToaster';
 import { PublicLayout } from './components/public/PublicLayout';
 import { DocsLayout } from './components/public/DocsLayout';
-import { SettingsProvider } from './stores/SettingsContext';
-import { WatchlistProvider } from './stores/WatchlistContext';
+import { SettingsProvider } from './stores/SettingsProvider';
+import { WatchlistProvider } from './stores/WatchlistProvider';
 
 /* Public site */
 const Landing = lazy(() => import('./pages/Landing').then((m) => ({ default: m.Landing })));

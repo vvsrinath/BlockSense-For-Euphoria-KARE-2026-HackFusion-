@@ -62,7 +62,13 @@ export function useSearchSubmit() {
         return { tone: 'error', title: "We couldn't identify this input.", message: 'Check the address or transaction hash and try again.' };
       }
 
-      go(detection.action, value, chain);
+      // A value that fits several chains is opened on one of them explicitly
+      // rather than left for the destination page to guess from the shape
+      // again — otherwise an `0x…` address silently lands on Ethereum even
+      // when the visitor meant BNB Chain. The search box offers the other
+      // matches as a one-click switch.
+      const target = chain && chain !== 'all' ? chain : detection.chains[0] ?? 'all';
+      go(detection.action, value, target);
       return null;
     },
     [go]

@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '@blocksense/shared';
+import { SettingsContext } from './SettingsContext';
 
 const STORAGE_KEY = 'blocksense.settings';
 
@@ -13,15 +14,6 @@ const DEFAULTS: Settings = {
   simulateError: false,
   rememberSearches: true
 };
-
-interface SettingsContextValue {
-  settings: Settings;
-  update: (patch: Partial<Settings>) => void;
-  reset: () => void;
-  resolvedTheme: 'light' | 'dark';
-}
-
-const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 function readSettings(): Settings {
   try {
@@ -58,10 +50,4 @@ export function SettingsProvider({ children }: {children: React.ReactNode;}) {
 
   const value = useMemo(() => ({ settings, update, reset, resolvedTheme }), [settings, update, reset, resolvedTheme]);
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
-}
-
-export function useSettings(): SettingsContextValue {
-  const ctx = useContext(SettingsContext);
-  if (!ctx) throw new Error('useSettings must be used within SettingsProvider');
-  return ctx;
 }

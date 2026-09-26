@@ -6,7 +6,7 @@ import { PWAUpdateBanner } from './PWAInstall';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { PageContainer } from './PageContainer';
-import { MobileSidebarProvider } from '../../stores/MobileSidebarContext';
+import { MobileSidebarProvider } from '../../stores/MobileSidebarProvider';
 import { Skeleton } from '@blocksense/ui';
 
 function PageFallback() {

@@ -44,7 +44,7 @@ export const publicNav: SiteLink[] = [
 /** Header links to the right of the primary navigation. */
 export const publicNavSecondary: SiteLink[] = [
   { label: 'Status', to: '/status', icon: ActivityIcon },
-  { label: 'Sign in', to: '/home' }
+  { label: 'Open app', to: '/home' }
 ];
 
 export interface FooterColumn {

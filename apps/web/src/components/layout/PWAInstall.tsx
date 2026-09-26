@@ -5,7 +5,11 @@ import { cn } from '@blocksense/shared';
 
 let deferredPrompt: Event | null = null;
 
-export function useInstallPrompt(): { isAvailable: boolean; promptInstall: () => Promise<void> } {
+/**
+ * Not exported: only `PWAInstall` uses it, and a hook exported alongside
+ * components from one file is what disables React Fast Refresh.
+ */
+function useInstallPrompt(): { isAvailable: boolean; promptInstall: () => Promise<void> } {
   const [isAvailable, setIsAvailable] = useState(false);
 
   useEffect(() => {
