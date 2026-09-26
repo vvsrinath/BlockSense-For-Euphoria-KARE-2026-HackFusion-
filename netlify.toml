@@ -71,6 +71,6 @@
 
 # PWA: ensure the app works offline
 [[headers]]
-  for = "/*"
+  for = "/sw.js"
   [headers.values]
     Service-Worker-Allowed = "/"

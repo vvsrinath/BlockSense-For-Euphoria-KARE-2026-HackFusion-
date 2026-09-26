@@ -8,6 +8,7 @@ import { UserMenu } from './UserMenu';
 import { useSettings } from '../../stores/SettingsContext';
 import { useMobileSidebar } from '../../stores/MobileSidebarContext';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { PWAInstall } from './PWAInstall';
 
 export function Topbar() {
   const { resolvedTheme, update } = useSettings();
@@ -37,7 +38,8 @@ export function Topbar() {
           <SearchBox />
         </div>
         <div className="ml-auto flex items-center gap-0.5">
-          <IconButton icon={dark ? SunIcon : MoonIcon} label={dark ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => update({ theme: dark ? 'light' : 'dark' })} />
+          <PWAInstall />
+          {isMobile ? null : <IconButton icon={dark ? SunIcon : MoonIcon} label={dark ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => update({ theme: dark ? 'light' : 'dark' })} />}
           <NotificationsMenu />
           <UserMenu />
         </div>

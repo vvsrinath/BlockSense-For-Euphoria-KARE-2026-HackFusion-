@@ -1,5 +1,5 @@
 {
-  "id": "/",
+  "id": "block-sense",
   "name": "BlockSense — Crypto Transaction Intelligence",
   "short_name": "BlockSense",
   "description": "Analyse on-chain transaction behaviour across Ethereum, BNB Chain, TRON, Solana and Bitcoin, and score activity against a wallet's own history.",
