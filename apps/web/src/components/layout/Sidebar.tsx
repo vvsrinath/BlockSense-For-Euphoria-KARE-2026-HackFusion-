@@ -6,14 +6,16 @@ import { SidebarLink } from './SidebarLink';
 import { useSettings } from '../../stores/SettingsContext';
 import { useMobileSidebar } from '../../stores/MobileSidebarContext';
 import { primaryNav } from '../../data/navigation';
-import { useMediaQuery, useIsMobile } from '../../hooks/useMediaQuery';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { cn } from '@blocksense/shared';
 import { developer } from '../../data/developer';
 
 export function Sidebar() {
   const { settings, update } = useSettings();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const isMobile = useIsMobile();
+  // Same range as the Topbar's hamburger. Below 768px the bottom bar owns
+  // navigation, so this drawer is not rendered at all there.
+  const showDrawer = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
   const { isOpen, close } = useMobileSidebar();
   const location = useLocation();
   const [rendered, setRendered] = useState(isOpen);
@@ -36,14 +38,17 @@ export function Sidebar() {
   }, [location.pathname]);
 
   const collapsed = isDesktop && settings.sidebarCollapsed;
-  // The drawer is always labelled on mobile; only the desktop rail collapses.
-  const railCollapsed = collapsed || isMobile;
+  // The drawer is always labelled; only the desktop rail collapses.
+  const railCollapsed = collapsed || showDrawer;
+
+  // A phone navigates from the bottom bar, so there is nothing to render here.
+  if (!isDesktop && !showDrawer) return null;
 
   return (
     <>
       {rendered && (
         <div
-          className={cn('fixed inset-0 z-40 bg-ink/50 transition-opacity duration-200 md:hidden print:hidden', isOpen ? 'opacity-100' : 'opacity-0')}
+          className={cn('fixed inset-0 z-40 bg-ink/50 transition-opacity duration-200 print:hidden', isOpen ? 'opacity-100' : 'opacity-0')}
           onClick={close}
           aria-hidden="true"
         />
@@ -51,12 +56,12 @@ export function Sidebar() {
       <aside
         id="mobile-nav-drawer"
         aria-label="Main navigation"
-        aria-hidden={isMobile && !isOpen ? 'true' : undefined}
+        aria-hidden={showDrawer && !isOpen ? 'true' : undefined}
         className={cn(
           'z-50 shrink-0 flex-col border-r border-line bg-surface transition-[width,transform] duration-200 ease-out print:hidden',
-          isMobile
+          showDrawer
             ? cn('fixed inset-y-0 left-0 flex w-[264px] shadow-xl', isOpen ? 'translate-x-0' : '-translate-x-full')
-            : cn('sticky top-0 hidden h-screen md:flex', collapsed ? 'w-[72px]' : 'w-[240px]')
+            : cn('sticky top-0 flex h-screen', collapsed ? 'w-[72px]' : 'w-[240px]')
         )}
       >
         <div className={cn('flex h-16 shrink-0 items-center', railCollapsed ? 'justify-center' : 'px-5')}>
@@ -64,11 +69,11 @@ export function Sidebar() {
             to="/"
             aria-label="BlockSense — back to landing page"
             className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            onClick={isMobile ? close : undefined}
+            onClick={showDrawer ? close : undefined}
           >
             <BrandLogo variant={railCollapsed ? 'mark' : 'full'} size={28} />
           </Link>
-          {isMobile && (
+          {showDrawer && (
             <button
               type="button"
               onClick={close}
@@ -84,15 +89,15 @@ export function Sidebar() {
           <ul className="space-y-0.5">
             {primaryNav.map((item) => (
               <li key={item.to}>
-                <SidebarLink to={item.to} label={item.label} icon={item.icon} collapsed={railCollapsed} onClick={isMobile ? close : undefined} />
+                <SidebarLink to={item.to} label={item.label} icon={item.icon} collapsed={railCollapsed} onClick={showDrawer ? close : undefined} />
               </li>
             ))}
           </ul>
         </nav>
 
         <div className="space-y-0.5 border-t border-line px-3 py-3">
-          <SidebarLink to="/settings" label="Settings" icon={SettingsIcon} collapsed={railCollapsed} onClick={isMobile ? close : undefined} />
-          <SidebarLink to="/help" label="Help" icon={BoxIcon} collapsed={railCollapsed} onClick={isMobile ? close : undefined} />
+          <SidebarLink to="/settings" label="Settings" icon={SettingsIcon} collapsed={railCollapsed} onClick={showDrawer ? close : undefined} />
+          <SidebarLink to="/help" label="Help" icon={BoxIcon} collapsed={railCollapsed} onClick={showDrawer ? close : undefined} />
           {isDesktop && (
             <button
               type="button"
@@ -115,7 +120,7 @@ export function Sidebar() {
             to="/about"
             className={cn('mt-2 flex items-center gap-3 rounded-xl py-2 hover:bg-subtle', railCollapsed ? 'justify-center' : 'px-2')}
             aria-label={`${developer.name} — about the developer`}
-            onClick={isMobile ? close : undefined}
+            onClick={showDrawer ? close : undefined}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
               {developer.initials}

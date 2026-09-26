@@ -48,8 +48,10 @@ describe('MobileNav', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'More navigation' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
+    // Every row also carries a hint line ("Watchlist / Wallets you are
+    // tracking"), so the accessible name is the label plus that line.
     for (const label of ['Watchlist', 'Reports', 'Alerts', 'Settings', 'Help']) {
-      expect(screen.getByRole('link', { name: label })).toBeTruthy();
+      expect(screen.getByRole('link', { name: new RegExp(`^${label}`) })).toBeTruthy();
     }
   });
 

@@ -7,19 +7,23 @@ import { NotificationsMenu } from './NotificationsMenu';
 import { UserMenu } from './UserMenu';
 import { useSettings } from '../../stores/SettingsContext';
 import { useMobileSidebar } from '../../stores/MobileSidebarContext';
-import { useIsMobile } from '../../hooks/useMediaQuery';
+import { useIsMobile, useMediaQuery } from '../../hooks/useMediaQuery';
 import { PWAInstall } from './PWAInstall';
 
 export function Topbar() {
   const { resolvedTheme, update } = useSettings();
   const dark = resolvedTheme === 'dark';
   const isMobile = useIsMobile();
+  // Phones have the bottom bar plus the More sheet, and ≥1024px has the rail,
+  // so the hamburger — and the second, identical menu it opens — only exists
+  // in the tablet range where neither is on screen.
+  const showMenuButton = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
   const { isOpen, toggle } = useMobileSidebar();
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur print:hidden">
       <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-3 gap-y-3 px-4 py-3 md:h-16 md:flex-nowrap md:px-6 md:py-0 lg:px-8">
-        {isMobile && (
+        {showMenuButton && (
           <button
             type="button"
             onClick={toggle}
