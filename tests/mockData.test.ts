@@ -332,11 +332,18 @@ describe('wallet coherence', () => {
   });
 
   it('labels each behavior meter once, with a verdict matching its value', () => {
+    // The asset trait's value is a share of transfers, not a stability score,
+    // so it is graded on concentration instead of the stability bands.
+    const concentrationWords = ['dominant', 'primary', 'leading', 'recurring', 'occasional'];
     for (let i = 0; i < 40; i++) {
       const wallet = MOCK_DATA.generateWallet(seeded(), undefined, CHAINS[i % CHAINS.length]);
       const labels = wallet.dna.traits.map((t) => t.label);
       expect(new Set(labels).size).toBe(labels.length);
       for (const trait of wallet.dna.traits) {
+        if (trait.label === 'Common Asset') {
+          expect(concentrationWords).toContain(trait.descriptor);
+          continue;
+        }
         const stable = trait.value >= 75;
         const veryVolatile = trait.value < 18;
         if (stable) expect(trait.descriptor).toBe('stable');

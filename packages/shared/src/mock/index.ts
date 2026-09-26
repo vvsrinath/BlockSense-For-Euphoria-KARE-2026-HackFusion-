@@ -186,6 +186,19 @@ function descriptorFor(value: number): string {
   return 'very volatile';
 }
 
+/**
+ * The words for the asset trait, where the value is a share of transfers
+ * rather than a stability score: "Common Asset: volatile" would claim the
+ * wallet keeps switching assets, which a 25% share says nothing about.
+ */
+function assetDescriptorFor(share: number): string {
+  if (share >= 70) return 'dominant';
+  if (share >= 50) return 'primary';
+  if (share >= 35) return 'leading';
+  if (share >= 20) return 'recurring';
+  return 'occasional';
+}
+
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -398,7 +411,7 @@ export function generateWallet(rand: () => number, addressOverride?: string, cha
   };
   const traits = templates.slice(0, traitCount).map((template) => {
     const value = traitValues[template.id];
-    const descriptor = descriptorFor(value);
+    const descriptor = template.id === 'asset' ? assetDescriptorFor(value) : descriptorFor(value);
     return { label: template.label, value, descriptor, description: traitDescriptions[template.id](descriptor) };
   });
 
