@@ -15,6 +15,21 @@
     <meta name="msapplication-TileImage" content="/icon-192.png" />
     <meta name="robots" content="index, follow" />
 
+    <!-- Fonts: preconnected so the stylesheet request does not pay DNS+TLS,
+         and loaded without blocking paint (see the note in styles/index.css). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      media="print"
+      onload="this.media='all'" />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+    </noscript>
+
     <title>BlockSense — Crypto Transaction Intelligence</title>
     <meta
       name="description"

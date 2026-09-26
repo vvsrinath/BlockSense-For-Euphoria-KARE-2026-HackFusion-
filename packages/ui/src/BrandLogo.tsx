@@ -39,6 +39,11 @@ export function BrandLogo({ variant = 'full', size = 28, showTagline = false, cl
   const mark = (
     <img
       src="/logo-mark.png"
+      // The emblem is 21–26 CSS px wide, so the browser is told the rendered
+      // width and given the two WebP sizes that cover 1x and 2x. Falling back
+      // to the 49 kB PNG would ship eight times the bytes for a 26px logo.
+      srcSet="/logo-mark-64.webp 64w, /logo-mark-128.webp 128w"
+      sizes={`${width}px`}
       alt=""
       aria-hidden="true"
       width={width}

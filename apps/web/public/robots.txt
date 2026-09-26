@@ -1,0 +1,3 @@
+# Allow full indexing: BlockSense publishes no private routes.
+User-agent: *
+Allow: /

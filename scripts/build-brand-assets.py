@@ -228,6 +228,16 @@ def main() -> None:
     mark = emblem(logo)
     write("logo-mark.png", mark)
 
+    # The emblem is drawn 21–26px wide in the header, so the two widths the UI
+    # can actually ask for are shipped as WebP. Serving the 215×263 PNG (49 kB)
+    # for a 26px logo is what the "next-gen image formats" and "responsive
+    # images" audits flag.
+    for width in (64, 128):
+        height = round(mark.height * width / mark.width)
+        name = f"logo-mark-{width}.webp"
+        mark.resize((width, height), Image.LANCZOS).save(OUT / name, "WEBP", quality=90, method=6)
+        written.append(name)
+
     for size in (16, 32, 48, 64, 180, 192, 512):
         raster = square(mark, size)
         name = {180: "apple-touch-icon.png", 192: "icon-192.png", 512: "icon-512.png"}.get(

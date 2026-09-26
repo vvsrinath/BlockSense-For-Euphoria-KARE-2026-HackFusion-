@@ -22,6 +22,9 @@ const ASSETS_TO_CACHE = [
   '/icon-maskable-512.png',
   '/logo.png',
   '/logo-mark.png',
+  '/logo-mark-64.webp',
+  '/logo-mark-128.webp',
+  '/robots.txt',
   '/og-image.png'
 ];
 
